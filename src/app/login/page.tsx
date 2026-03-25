@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 
 export default function LoginPage() {
@@ -34,7 +35,9 @@ export default function LoginPage() {
     <div className="auth-layout">
       {/* Left gradient panel */}
       <div className="auth-panel">
-        <div className="auth-panel-logo">✦</div>
+        <div className="auth-panel-logo">
+          <Image src="/logo.jpeg" alt="Invoice Mudah" width={48} height={48} className="rounded-md object-contain" style={{ width: 'auto', height: 'auto' }} />
+        </div>
         <div className="auth-panel-content">
           <p className="auth-panel-label">Welcome back</p>
           <h2 className="auth-panel-headline">
@@ -50,7 +53,9 @@ export default function LoginPage() {
       {/* Right form panel */}
       <div className="auth-form-panel">
         <div className="auth-form-inner">
-          <div className="auth-logo">✦</div>
+          <div className="auth-logo">
+            <Image src="/logo.jpeg" alt="Invoice Mudah" width={48} height={48} className="rounded-md object-contain" style={{ width: 'auto', height: 'auto' }} />
+          </div>
           <h1 className="auth-title">Sign in</h1>
           <p className="auth-subtitle">
             Access your invoices, clients, and projects &mdash; all in one place.

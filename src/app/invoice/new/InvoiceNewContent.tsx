@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import InvoiceForm from '@/components/InvoiceForm';
+import Image from 'next/image';
 import type { Business, UserSettings } from '@/types/invoice';
 
 export default function InvoiceNewContent() {
@@ -68,7 +69,10 @@ export default function InvoiceNewContent() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <a href="/dashboard" className="app-logo">InvoiceMudah</a>
+        <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
+          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
+          Invoice Mudah
+        </a>
         <a href={`/business/${businessId}`} className="app-back">← {business.name}</a>
       </header>
 

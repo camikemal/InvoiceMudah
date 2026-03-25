@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import BusinessForm from '@/components/BusinessForm';
+import Image from 'next/image';
 import type { Business } from '@/types/invoice';
 
 export default function NewBusinessPage() {
@@ -32,7 +33,10 @@ export default function NewBusinessPage() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <a href="/dashboard" className="app-logo">InvoiceMudah</a>
+        <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
+          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
+          Invoice Mudah
+        </a>
         <a href="/dashboard" className="app-back">← Dashboard</a>
       </header>
 

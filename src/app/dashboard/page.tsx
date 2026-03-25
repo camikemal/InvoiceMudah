@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
+import Image from 'next/image';
 import SignOutButton from './SignOutButton';
 
 export default async function DashboardPage() {
@@ -21,7 +22,10 @@ export default async function DashboardPage() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <span className="app-logo">InvoiceMudah</span>
+        <span className="app-logo flex flex-row items-center gap-2">
+          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
+          Invoice Mudah
+        </span>
         <div className="app-header-right">
           <span className="app-user-email">{user.email}</span>
           <SignOutButton />
