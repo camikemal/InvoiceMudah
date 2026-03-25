@@ -24,6 +24,10 @@ interface InvoiceFormProps {
   business: Business;
   userId: string;
   userSettings: UserSettings;
+  /** Existing invoice data for editing */
+  initialData?: Invoice;
+  /** 'new' (default) or 'edit' */
+  mode?: 'new' | 'edit';
   /** Called after successful save — parent navigates away */
   onDone: () => void;
 }
@@ -38,31 +42,42 @@ export default function InvoiceForm({
   business,
   userId,
   userSettings,
+  initialData,
+  mode = 'new',
   onDone,
 }: InvoiceFormProps) {
   const supabase = createClient();
-  const today = new Date().toISOString().split('T')[0];
+  const today = initialData?.invoice_date || new Date().toISOString().split('T')[0];
 
   // ── Document type ─────────────────────────────────────────────
-  const [docType, setDocType] = useState<DocumentType>('RECEIPT');
+  const [docType, setDocType] = useState<DocumentType>(initialData?.document_type || 'RECEIPT');
 
   // ── Running number ────────────────────────────────────────────
   // currentNumber = the LAST used number (from user_settings)
   // nextNumber    = currentNumber + 1 (this is what we'll assign)
-  const [currentNumber, setCurrentNumber] = useState(userSettings.last_invoice_number);
+  // If editing, we use the number from initialData but stripped of the prefix
+  const getInitialNumber = () => {
+    if (mode === 'edit' && initialData) {
+      const parts = initialData.invoice_number.split('_');
+      return parseInt(parts[parts.length - 1]) - 1; // subtract 1 because nextNumber adds 1
+    }
+    return userSettings.last_invoice_number;
+  };
+
+  const [currentNumber, setCurrentNumber] = useState(getInitialNumber());
   const nextNumber    = currentNumber + 1;
   const invoiceNumber = formatInvoiceNumber(business.name, nextNumber);
 
   // ── Customer details ──────────────────────────────────────────
-  const [customerName,  setCustomerName]  = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [description,   setDescription]  = useState('');
+  const [customerName,  setCustomerName]  = useState(initialData?.customer_name || '');
+  const [customerPhone, setCustomerPhone] = useState(initialData?.customer_phone || '');
+  const [description,   setDescription]  = useState(initialData?.description || '');
 
   // ── Line items ────────────────────────────────────────────────
-  const [items, setItems] = useState<InvoiceItem[]>([emptyItem()]);
+  const [items, setItems] = useState<InvoiceItem[]>(initialData?.items || [emptyItem()]);
 
   // ── Discount ──────────────────────────────────────────────────
-  const [discount, setDiscount] = useState(0);
+  const [discount, setDiscount] = useState(initialData?.discount || 0);
 
   // ── UI state ──────────────────────────────────────────────────
   const [saving,  setSaving]  = useState(false);
@@ -113,8 +128,8 @@ export default function InvoiceForm({
     total: finalTotal,
   });
 
-  // ── Download PDF + Auto-Save ──────────────────────────────────
-  const handleDownloadAndSave = async () => {
+  // ── Save to Supabase ──────────────────────────────────────────
+  const handleSave = async () => {
     if (!customerName.trim()) {
       setError('Please enter a customer name.');
       return;
@@ -122,52 +137,87 @@ export default function InvoiceForm({
     setError('');
 
     const invoice = buildInvoice();
-
-    // 1. Generate + download the PDF immediately (browser action)
-    generatePDF(invoice, business);
-
-    // 2. Save to Supabase
     setSaving(true);
     try {
-      // Insert invoice header
-      const { data: inv, error: invErr } = await supabase
-        .from('invoices')
-        .insert({
-          user_id:        userId,
-          business_id:    invoice.business_id,
-          invoice_number: invoice.invoice_number,
-          customer_name:  invoice.customer_name,
-          customer_phone: invoice.customer_phone,
-          description:    invoice.description,
-          discount:       invoice.discount,
-          subtotal:       invoice.subtotal,
-          total:          invoice.total,
-          invoice_date:   invoice.invoice_date,
-          document_type:  invoice.document_type,
-        })
-        .select()
-        .single();
+      if (mode === 'edit' && initialData?.id) {
+        // UPDATE existing invoice
+        const { error: invErr } = await supabase
+          .from('invoices')
+          .update({
+            invoice_number: invoice.invoice_number,
+            customer_name:  invoice.customer_name,
+            customer_phone: invoice.customer_phone,
+            description:    invoice.description,
+            discount:       invoice.discount,
+            subtotal:       invoice.subtotal,
+            total:          invoice.total,
+            invoice_date:   invoice.invoice_date,
+            document_type:  invoice.document_type,
+          })
+          .eq('id', initialData.id);
 
-      if (invErr) throw invErr;
+        if (invErr) throw invErr;
 
-      // Insert line items
-      const itemRows = invoice.items.map((item, idx) => ({
-        invoice_id: inv.id,
-        item_name:  item.item_name,
-        quantity:   item.quantity,
-        price:      item.price,
-        total:      item.total,
-        sort_order: idx,
-      }));
-      const { error: itemsErr } = await supabase
-        .from('invoice_items')
-        .insert(itemRows);
-      if (itemsErr) throw itemsErr;
+        // Sync line items: simplest is delete + insert
+        await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', initialData.id);
 
-      // Update (or insert) user running number
-      await supabase
-        .from('user_settings')
-        .upsert({ user_id: userId, last_invoice_number: nextNumber }, { onConflict: 'user_id' });
+        const itemRows = invoice.items.map((item, idx) => ({
+          invoice_id: initialData.id,
+          item_name:  item.item_name,
+          quantity:   item.quantity,
+          price:      item.price,
+          total:      item.total,
+          sort_order: idx,
+        }));
+        const { error: itemsErr } = await supabase
+          .from('invoice_items')
+          .insert(itemRows);
+        if (itemsErr) throw itemsErr;
+
+      } else {
+        // INSERT new invoice
+        const { data: inv, error: invErr } = await supabase
+          .from('invoices')
+          .insert({
+            user_id:        userId,
+            business_id:    invoice.business_id,
+            invoice_number: invoice.invoice_number,
+            customer_name:  invoice.customer_name,
+            customer_phone: invoice.customer_phone,
+            description:    invoice.description,
+            discount:       invoice.discount,
+            subtotal:       invoice.subtotal,
+            total:          invoice.total,
+            invoice_date:   invoice.invoice_date,
+            document_type:  invoice.document_type,
+          })
+          .select()
+          .single();
+
+        if (invErr) throw invErr;
+
+        // Insert line items
+        const itemRows = invoice.items.map((item, idx) => ({
+          invoice_id: inv.id,
+          item_name:  item.item_name,
+          quantity:   item.quantity,
+          price:      item.price,
+          total:      item.total,
+          sort_order: idx,
+        }));
+        const { error: itemsErr } = await supabase
+          .from('invoice_items')
+          .insert(itemRows);
+        if (itemsErr) throw itemsErr;
+
+        // Update user running number (only for NEW invoices)
+        await supabase
+          .from('user_settings')
+          .upsert({ user_id: userId, last_invoice_number: nextNumber }, { onConflict: 'user_id' });
+      }
 
       setSaved(true);
     } catch (err: unknown) {
@@ -177,19 +227,30 @@ export default function InvoiceForm({
     }
   };
 
+  // ── Download PDF Only ─────────────────────────────────────────
+  const handleDownload = () => {
+    const invoice = buildInvoice();
+    generatePDF(invoice, business);
+  };
+
   // ── Post-save state ───────────────────────────────────────────
   if (saved) {
     return (
       <div className="invoice-saved-screen">
         <div className="invoice-saved-icon">✓</div>
-        <h2>Invoice Downloaded &amp; Saved</h2>
+        <h2>Invoice Downloaded &amp; {mode === 'edit' ? 'Updated' : 'Saved'}</h2>
         <p className="invoice-saved-num">{invoiceNumber}</p>
         <p className="invoice-saved-sub">
-          The PDF was downloaded and the record is saved to your account.
+          The record is {mode === 'edit' ? 'updated' : 'saved'} to your account. You can download the PDF anytime.
         </p>
-        <button className="btn btn--primary" onClick={onDone}>
-          ← Back to {business.name}
-        </button>
+        <div className="flex gap-2">
+          <button className="btn btn--secondary" onClick={handleDownload}>
+            ⬇ Download PDF
+          </button>
+          <button className="btn btn--primary" onClick={onDone}>
+            ← Back to {business.name}
+          </button>
+        </div>
       </div>
     );
   }
@@ -254,7 +315,7 @@ export default function InvoiceForm({
             <label>Customer Name *</label>
             <input
               id="inv-customer-name"
-              placeholder="e.g. Khass Event Management Sdn Bhd"
+              placeholder="e.g. Akmal Hakim"
               value={customerName}
               onChange={e => setCustomerName(e.target.value)}
             />
@@ -263,7 +324,7 @@ export default function InvoiceForm({
             <label>Customer Phone</label>
             <input
               id="inv-customer-phone"
-              placeholder="e.g. 011-21551660"
+              placeholder="e.g. 018-765 4321"
               value={customerPhone}
               onChange={e => setCustomerPhone(e.target.value)}
             />
@@ -322,15 +383,23 @@ export default function InvoiceForm({
       {/* ── Action ───────────────────────────────────────────── */}
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inv-action">
+      <div className="inv-action inv-action--split">
         <button
-          id="inv-download-save"
+          id="inv-save-only"
           type="button"
-          className="btn btn--primary btn--lg"
-          onClick={handleDownloadAndSave}
+          className="btn btn--ghost btn--lg"
+          onClick={handleSave}
           disabled={saving}
         >
-          {saving ? 'Saving…' : '⬇ Download PDF & Save'}
+          {saving ? 'Saving…' : mode === 'edit' ? 'Save Changes' : 'Save Record'}
+        </button>
+        <button
+          id="inv-download-only"
+          type="button"
+          className="btn btn--primary btn--lg"
+          onClick={handleDownload}
+        >
+          ⬇ Download PDF
         </button>
       </div>
     </div>

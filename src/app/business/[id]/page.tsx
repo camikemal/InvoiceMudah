@@ -10,7 +10,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import BusinessForm from '@/components/BusinessForm';
 import Image from 'next/image';
-import type { Business } from '@/types/invoice';
+import type { Business, Invoice } from '@/types/invoice';
+import { generatePDF } from '@/lib/generatePDF';
+import { Eye, Edit, Trash2, X, Download } from 'lucide-react';
 
 interface PastInvoice {
   id: string;
@@ -31,6 +33,11 @@ export default function BusinessDetailPage() {
   const [invoices, setInvoices] = useState<PastInvoice[]>([]);
   const [editing,  setEditing]  = useState(false);
   const [loading,  setLoading]  = useState(true);
+
+  // Preview Modal state
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -81,6 +88,56 @@ export default function BusinessDetailPage() {
       setLoading(false);
     } else {
       router.push('/dashboard');
+    }
+  };
+
+  const handleOpenPreview = async (invId: string) => {
+    if (!business) return;
+    setPreviewLoading(true);
+    setShowPreview(true);
+    
+    // Fetch full invoice data including items
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', invId)
+      .single();
+    
+    if (!inv) { setShowPreview(false); setPreviewLoading(false); return; }
+
+    const { data: items } = await supabase
+      .from('invoice_items')
+      .select('*')
+      .eq('invoice_id', invId)
+      .order('sort_order', { ascending: true });
+
+    const fullInvoice: Invoice = {
+      ...inv,
+      items: (items || []).map((it: any) => ({
+        id: it.id,
+        item_name: it.item_name,
+        quantity: it.quantity,
+        price: it.price,
+        total: it.total
+      }))
+    };
+
+    setSelectedInv(fullInvoice);
+    setPreviewLoading(false);
+  };
+
+  const handleDeleteInvoice = async (invId: string, invNum: string) => {
+    if (!window.confirm(`Are you sure you want to delete invoice "${invNum}"?`)) return;
+
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', invId);
+
+    if (error) {
+      alert(error.message);
+    } else {
+      setInvoices((prev: PastInvoice[]) => prev.filter((i: PastInvoice) => i.id !== invId));
     }
   };
 
@@ -189,6 +246,7 @@ export default function BusinessDetailPage() {
                   <th>Customer</th>
                   <th>Type</th>
                   <th className="text-right">Total</th>
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -203,12 +261,137 @@ export default function BusinessDetailPage() {
                       </span>
                     </td>
                     <td className="text-right">RM {Number(inv.total).toFixed(2)}</td>
+                    <td className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          className="btn btn--ghost btn--sm p-0 w-8 h-8" 
+                          onClick={() => handleOpenPreview(inv.id)}
+                          title="Preview PDF"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <a 
+                          href={`/invoice/edit/${inv.id}`} 
+                          className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                          title="Edit Invoice"
+                        >
+                          <Edit size={16} />
+                        </a>
+                        <button 
+                          className="btn btn--danger btn--sm p-0 w-8 h-8" 
+                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                          title="Delete Invoice"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </section>
+
+        {/* ── Preview Modal ─────────────────────────────────── */}
+        {showPreview && (
+          <div className="modal-overlay">
+            <div className="modal-content modal-content--large">
+              <header className="modal-header">
+                <h2>Invoice Preview</h2>
+                <button className="modal-close" onClick={() => setShowPreview(false)}>
+                  <X size={20} />
+                </button>
+              </header>
+              <div className="modal-body">
+                {previewLoading ? (
+                  <div className="modal-loading"><div className="spinner" />Fetching details…</div>
+                ) : selectedInv ? (
+                  <div className="preview-wrap">
+                    <div className="preview-card">
+                      <div className="preview-header">
+                        <div className="preview-header-left">
+                          <div className="preview-badge">{selectedInv.document_type}</div>
+                          <div className="preview-meta-bold">{selectedInv.document_type} NUMBER: {selectedInv.invoice_number}</div>
+                          <div className="preview-meta-bold">DATE: {new Date(selectedInv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase()}</div>
+                        </div>
+                        <div className="preview-header-right">
+                          <div className="preview-biz-name" role="heading" aria-level={3}>{business.name}</div>
+                          <div className="preview-biz-meta">{business.location}</div>
+                          <div className="preview-biz-meta">{business.phone}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="preview-section">
+                        <div className="preview-section-title">BILL TO</div>
+                        <div className="preview-customer">{selectedInv.customer_name}</div>
+                        {selectedInv.customer_phone && <div className="preview-meta-bold">{selectedInv.customer_phone}</div>}
+                      </div>
+
+                      {selectedInv.description && (
+                        <div className="preview-section" style={{ marginTop: '24px' }}>
+                          <div className="preview-section-title">DESCRIPTION</div>
+                          <div className="preview-desc" style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                            {selectedInv.description}
+                          </div>
+                        </div>
+                      )}
+
+                      <table className="preview-table">
+                        <thead>
+                          <tr>
+                            <th>ITEM</th>
+                            <th className="text-center">QTY</th>
+                            <th className="text-center">PRICE</th>
+                            <th className="text-right">TOTAL</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedInv.items.map((item, idx) => (
+                            <tr key={idx}>
+                              <td>{item.item_name}</td>
+                              <td className="text-center">{item.quantity}</td>
+                              <td className="text-center">RM {item.price.toFixed(2)}</td>
+                              <td className="text-right">RM {item.total.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      <div className="preview-summary">
+                        <div className="preview-summary-line">
+                          <span>Sub Total</span>
+                          <span style={{ color: '#0f172a' }}>RM {selectedInv.subtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="preview-summary-line">
+                          <span>Discount</span>
+                          <span style={{ color: '#0f172a' }}>RM {selectedInv.discount.toFixed(2)}</span>
+                        </div>
+                        <div className="preview-total-row">
+                          <span>TOTAL</span>
+                          <span>RM {selectedInv.total.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="p-8 text-center text-gray-500">Failed to load invoice details.</p>
+                )}
+              </div>
+              <footer className="modal-footer">
+                <button className="btn btn--ghost" style={{ borderRadius: '12px', padding: '10px 24px' }} onClick={() => setShowPreview(false)}>Close</button>
+                <button 
+                  className="btn btn--primary flex gap-2" 
+                  style={{ borderRadius: '12px', padding: '10px 24px' }}
+                  onClick={() => selectedInv && generatePDF(selectedInv, business)}
+                  disabled={previewLoading || !selectedInv}
+                >
+                  <Download size={18} /> Download PDF
+                </button>
+              </footer>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

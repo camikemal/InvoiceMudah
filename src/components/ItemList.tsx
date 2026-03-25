@@ -45,7 +45,7 @@ export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListP
             <input
               id={`item-name-${idx}`}
               className="item-input"
-              placeholder="e.g. ADIA HOMESTAY"
+              placeholder="e.g. Deluxe Room"
               value={item.item_name}
               onChange={e => onChange(idx, 'item_name', e.target.value)}
             />

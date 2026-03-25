@@ -75,7 +75,7 @@ export default function SignupPage() {
                 id="email"
                 type="email"
                 className="auth-input"
-                placeholder="you@example.com"
+                placeholder="e.g. akmal@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -90,7 +90,7 @@ export default function SignupPage() {
                 id="phone"
                 type="tel"
                 className="auth-input"
-                placeholder="+601X-XXXXXXXX"
+                placeholder="e.g. 012-345 6789"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
