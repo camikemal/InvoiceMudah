@@ -50,7 +50,7 @@ export default function InvoiceForm({
   const today = initialData?.invoice_date || new Date().toISOString().split('T')[0];
 
   // ── Document type ─────────────────────────────────────────────
-  const [docType, setDocType] = useState<DocumentType>(initialData?.document_type || 'RECEIPT');
+  const [docType, setDocType] = useState<DocumentType>(initialData?.document_type || 'INVOICE');
 
   // ── Running number ────────────────────────────────────────────
   // currentNumber = the LAST used number (from user_settings)
@@ -58,20 +58,27 @@ export default function InvoiceForm({
   // If editing, we use the number from initialData but stripped of the prefix
   const getInitialNumber = () => {
     if (mode === 'edit' && initialData) {
-      const parts = initialData.invoice_number.split('_');
-      return parseInt(parts[parts.length - 1]) - 1; // subtract 1 because nextNumber adds 1
+      const numStr = initialData.invoice_number;
+      // Try new format: "TYPE N - BIZ"
+      const matchNew = numStr.match(/^(?:INVOICE|RECEIPT|QUOTATION)\s+(\d+)\s+-/i);
+      if (matchNew) return parseInt(matchNew[1]) - 1;
+      
+      // Try old format: "PREFIX_BIZ_N"
+      const parts = numStr.split('_');
+      const lastPart = parseInt(parts[parts.length - 1]);
+      if (!isNaN(lastPart)) return lastPart - 1;
     }
     return userSettings.last_invoice_number;
   };
 
   const [currentNumber, setCurrentNumber] = useState(getInitialNumber());
   const nextNumber    = currentNumber + 1;
-  const invoiceNumber = formatInvoiceNumber(business.name, nextNumber);
+  const invoiceNumber = formatInvoiceNumber(docType, business.name, nextNumber);
 
   // ── Customer details ──────────────────────────────────────────
   const [customerName,  setCustomerName]  = useState(initialData?.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(initialData?.customer_phone || '');
-  const [description,   setDescription]  = useState(initialData?.description || '');
+  const [description,   setDescription]  = useState(initialData?.description || 'Check in  :\nCheck out :');
 
   // ── Line items ────────────────────────────────────────────────
   const [items, setItems] = useState<InvoiceItem[]>(initialData?.items || [emptyItem()]);

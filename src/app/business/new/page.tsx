@@ -32,12 +32,19 @@ export default function NewBusinessPage() {
 
   return (
     <div className="app-layout">
-      <header className="app-header">
-        <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
-          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
-          Invoice Mudah
-        </a>
-        <a href="/dashboard" className="app-back">← Dashboard</a>
+      <header className="app-header flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <a href="/dashboard" className="app-logo flex items-center gap-2">
+            <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" />
+            <span className="hidden sm:inline">Invoice Mudah</span>
+          </a>
+          <div className="h-6 w-px bg-gray-200"></div>
+          <a href="/dashboard" className="-ml-3 flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 py-1.5 px-3 rounded-lg border border-gray-200 transition-all">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            Back to Dashboard
+          </a>
+        </div>
+        <div className="text-sm font-bold text-gray-800">New Business</div>
       </header>
 
       <main className="app-main app-main--narrow">

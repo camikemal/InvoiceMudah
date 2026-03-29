@@ -165,6 +165,7 @@ html, body {
   padding: 0 32px; height: 56px;
   background: var(--white);
   border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50;
 }
 
 .app-logo {
@@ -181,7 +182,7 @@ html, body {
 .app-back:hover { color: var(--text); }
 
 .app-main {
-  flex: 1; padding: 40px 32px;
+  flex: 1; padding: 16px 32px 40px;
   max-width: 960px; margin: 0 auto; width: 100%;
 }
 
@@ -257,7 +258,7 @@ html, body {
 .form-field input, .form-field textarea {
   height: 40px; padding: 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius);
-  font-size: 14px; color: var(--text); background: var(--white);
+  font-size: 14px; font-weight: 500; color: var(--text); background: var(--white);
   outline: none; font-family: inherit;
   transition: border-color 0.15s;
 }
@@ -420,7 +421,7 @@ html, body {
 .inv-table tr:last-child td { border-bottom: none; }
 .inv-table tbody tr:hover td { background: #fafafa; }
 
-.inv-table-num { font-family: 'Courier New', monospace; font-size: 12px; }
+.inv-table-num { font-size: 12px; }
 
 /* Document type badges */
 .doc-badge {
@@ -444,6 +445,7 @@ html, body {
   border-radius: 20px;
   padding: 40px;
   display: flex; flex-direction: column; gap: 32px;
+  font-weight: 500;
 }
 
 /* Header preview */
@@ -455,11 +457,11 @@ html, body {
 }
 
 .inv-header-left { display: flex; flex-direction: column; gap: 6px; }
-.inv-header-meta { font-family: 'Courier New', monospace; font-size: 11px; color: var(--text-2); }
+.inv-header-meta { font-size: 11px; color: var(--text-2); }
 
 .inv-header-right { text-align: right; display: flex; flex-direction: column; gap: 3px; }
 .inv-biz-name { font-size: 18px; font-weight: 800; text-transform: uppercase; }
-.inv-biz-meta { font-family: 'Courier New', monospace; font-size: 11px; color: var(--text-2); }
+.inv-biz-meta { font-size: 11px; color: var(--text-2); }
 
 /* Document type toggle */
 .doc-type-group { display: flex; gap: 6px; margin-bottom: 4px; }
@@ -498,17 +500,17 @@ html, body {
 .running-input {
   width: 80px; height: 36px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: var(--radius);
-  font-size: 14px; text-align: center; color: var(--text);
+  font-size: 14px; font-weight: 500; text-align: center; color: var(--text);
   background: var(--white); outline: none;
   transition: border-color 0.15s;
 }
 .running-input:focus { border-color: var(--accent); }
-.running-preview { font-family: 'Courier New', monospace; font-size: 12px; color: var(--text-2); }
+.running-preview { font-size: 12px; color: var(--text-2); }
 
 /* Mono textarea (description) */
 .mono-textarea {
   padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
-  font-family: 'Courier New', monospace; font-size: 13px; color: var(--text);
+  font-size: 13px; font-weight: 600; color: var(--text);
   background: var(--white); outline: none; resize: vertical;
   line-height: 1.8;
   transition: border-color 0.15s;
@@ -550,7 +552,7 @@ html, body {
 .item-input {
   width: 100%; height: 34px; padding: 0 8px;
   border: 1px solid var(--border); border-radius: 6px;
-  font-size: 13px; color: var(--text); background: var(--white);
+  font-size: 13px; font-weight: 500; color: var(--text); background: var(--white);
   outline: none; transition: border-color 0.15s;
 }
 .item-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,70,229,0.08); }
@@ -592,7 +594,7 @@ html, body {
 .discount-input {
   width: 80px; height: 30px;
   padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
-  font-size: 13px; text-align: right; color: var(--text);
+  font-size: 13px; font-weight: 500; text-align: right; color: var(--text);
   outline: none; transition: border-color 0.15s;
 }
 .discount-input:focus { border-color: var(--accent); }
@@ -602,7 +604,6 @@ html, body {
   width: 240px; padding: 12px 16px;
   background: #f5f5f5; border: 1px solid #ddd; border-radius: var(--radius);
   font-size: 15px; font-weight: 800;
-  font-family: 'Courier New', monospace;
 }
 
 .inv-action { display: flex; flex-direction: column; gap: 8px; }
@@ -623,7 +624,7 @@ html, body {
   font-size: 22px; color: var(--green);
 }
 .invoice-saved-screen h2 { font-size: 20px; font-weight: 700; }
-.invoice-saved-num { font-family: 'Courier New', monospace; font-size: 13px; color: var(--text-2); }
+.invoice-saved-num { font-size: 13px; color: var(--text-2); }
 .invoice-saved-sub { font-size: 13px; color: var(--text-2); max-width: 340px; margin-bottom: 8px; }
 
 /* ═══════════════════════════════════════════════════════════

@@ -61,6 +61,7 @@ export const emptyItem = (): InvoiceItem => ({
 export const bizSlug = (name: string): string =>
   name.toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
 
-/** Format invoice number: INV_ADIAHOMESTAY_46 */
-export const formatInvoiceNumber = (bizName: string, n: number): string =>
-  `INV_${bizSlug(bizName)}_${n}`;
+/** Format document number: INVOICE 1046 - ADIA HOMESTAY, RCP 1047 - BILIK RIZQI, etc. */
+export const formatInvoiceNumber = (type: DocumentType, bizName: string, n: number): string => {
+  return `${type} ${n} - ${bizName}`;
+};
