@@ -23,21 +23,54 @@ interface PastInvoice {
   total: number;
 }
 
+interface InvoiceItemRow {
+  id: string;
+  item_name: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+interface PendingInvoiceDelete {
+  id: string;
+  invoiceNumber: string;
+}
+
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const supabase = createClient();
 
-  const [userId,   setUserId]   = useState('');
+  const [userId, setUserId] = useState('');
   const [business, setBusiness] = useState<Business | null>(null);
   const [invoices, setInvoices] = useState<PastInvoice[]>([]);
-  const [editing,  setEditing]  = useState(false);
-  const [loading,  setLoading]  = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Preview Modal state
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Delete confirmation states
+  const [showDeleteBusinessModal, setShowDeleteBusinessModal] = useState(false);
+  const [pendingInvoiceDelete, setPendingInvoiceDelete] = useState<PendingInvoiceDelete | null>(null);
+  const [deletingBusiness, setDeletingBusiness] = useState(false);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
+
+  useEffect(() => {
+    if (!showDeleteBusinessModal && !pendingInvoiceDelete) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (deletingBusiness || deletingInvoice) return;
+      setShowDeleteBusinessModal(false);
+      setPendingInvoiceDelete(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showDeleteBusinessModal, pendingInvoiceDelete, deletingBusiness, deletingInvoice]);
 
   useEffect(() => {
     async function load() {
@@ -65,7 +98,7 @@ export default function BusinessDetailPage() {
       setLoading(false);
     }
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const handleBusinessUpdated = (updated: Business) => {
@@ -73,11 +106,14 @@ export default function BusinessDetailPage() {
     setEditing(false);
   };
 
-  const handleDelete = async () => {
-    if (!business) return;
-    if (!window.confirm(`Are you sure you want to delete "${business.name}"? This business won't show on old invoices.`)) return;
+  const handleDelete = () => {
+    setShowDeleteBusinessModal(true);
+  };
 
-    setLoading(true);
+  const confirmDeleteBusiness = async () => {
+    if (!business) return;
+
+    setDeletingBusiness(true);
     const { error } = await supabase
       .from('businesses')
       .delete()
@@ -85,7 +121,7 @@ export default function BusinessDetailPage() {
 
     if (error) {
       alert(error.message);
-      setLoading(false);
+      setDeletingBusiness(false);
     } else {
       router.push('/dashboard');
     }
@@ -95,14 +131,14 @@ export default function BusinessDetailPage() {
     if (!business) return;
     setPreviewLoading(true);
     setShowPreview(true);
-    
+
     // Fetch full invoice data including items
     const { data: inv } = await supabase
       .from('invoices')
       .select('*')
       .eq('id', invId)
       .single();
-    
+
     if (!inv) { setShowPreview(false); setPreviewLoading(false); return; }
 
     const { data: items } = await supabase
@@ -113,7 +149,7 @@ export default function BusinessDetailPage() {
 
     const fullInvoice: Invoice = {
       ...inv,
-      items: (items || []).map((it: any) => ({
+      items: (items || []).map((it: InvoiceItemRow) => ({
         id: it.id,
         item_name: it.item_name,
         quantity: it.quantity,
@@ -126,19 +162,28 @@ export default function BusinessDetailPage() {
     setPreviewLoading(false);
   };
 
-  const handleDeleteInvoice = async (invId: string, invNum: string) => {
-    if (!window.confirm(`Are you sure you want to delete invoice "${invNum}"?`)) return;
+  const handleDeleteInvoice = (invId: string, invNum: string) => {
+    setPendingInvoiceDelete({ id: invId, invoiceNumber: invNum });
+  };
+
+  const confirmDeleteInvoice = async () => {
+    if (!pendingInvoiceDelete) return;
+
+    setDeletingInvoice(true);
 
     const { error } = await supabase
       .from('invoices')
       .delete()
-      .eq('id', invId);
+      .eq('id', pendingInvoiceDelete.id);
 
     if (error) {
       alert(error.message);
     } else {
-      setInvoices((prev: PastInvoice[]) => prev.filter((i: PastInvoice) => i.id !== invId));
+      setInvoices((prev: PastInvoice[]) => prev.filter((i: PastInvoice) => i.id !== pendingInvoiceDelete.id));
+      setPendingInvoiceDelete(null);
     }
+
+    setDeletingInvoice(false);
   };
 
   if (loading) return <div className="page-loading"><div className="spinner" />Loading…</div>;
@@ -146,19 +191,20 @@ export default function BusinessDetailPage() {
 
   return (
     <div className="app-layout">
-      <header className="app-header flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="app-header">
+        <div className="app-header-left">
           <a href="/dashboard" className="app-logo flex items-center gap-2">
             <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" />
-            <span className="hidden sm:inline">Invoice Mudah</span>
-          </a>
-          <div className="h-6 w-px bg-gray-200"></div>
-          <a href="/dashboard" className="-ml-3 flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 py-1.5 px-3 rounded-lg border border-gray-200 transition-all">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            Back to Dashboard
+            <span>Invoice Mudah</span>
           </a>
         </div>
-        <div className="text-sm font-bold text-gray-800 hidden sm:block">{business.name}</div>
+        <div className="app-header-actions">
+          <span className="app-header-title">{business.name}</span>
+          <a href="/dashboard" className="app-back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+            Dashboard
+          </a>
+        </div>
       </header>
 
       <main className="app-main">
@@ -172,17 +218,17 @@ export default function BusinessDetailPage() {
           </div>
           <div className="biz-detail-actions">
             <button
-              className="btn btn--ghost"
-              onClick={() => setEditing(!editing)}
-            >
-              {editing ? 'Cancel' : 'Edit'}
-            </button>
-            <button
               className="btn btn--danger"
               onClick={handleDelete}
               disabled={loading}
             >
               Delete
+            </button>
+            <button
+              className="btn btn--ghost"
+              onClick={() => setEditing(!editing)}
+            >
+              {editing ? 'Cancel' : 'Edit'}
             </button>
             <a
               href={`/invoice/new?businessId=${id}`}
@@ -245,58 +291,60 @@ export default function BusinessDetailPage() {
               </a>
             </div>
           ) : (
-            <table className="inv-table">
-              <thead>
-                <tr>
-                  <th>Invoice #</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Type</th>
-                  <th className="text-right">Total</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map(inv => (
-                  <tr key={inv.id}>
-                    <td className="inv-table-num">{inv.invoice_number}</td>
-                    <td>{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</td>
-                    <td>{inv.customer_name}</td>
-                    <td>
-                      <span className={`doc-badge doc-badge--${inv.document_type.toLowerCase()}`}>
-                        {inv.document_type}
-                      </span>
-                    </td>
-                    <td className="text-right">RM {Number(inv.total).toFixed(2)}</td>
-                    <td className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <button 
-                          className="btn btn--ghost btn--sm p-0 w-8 h-8" 
-                          onClick={() => handleOpenPreview(inv.id)}
-                          title="Preview PDF"
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <a 
-                          href={`/invoice/edit/${inv.id}`} 
-                          className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
-                          title="Edit Invoice"
-                        >
-                          <Edit size={16} />
-                        </a>
-                        <button 
-                          className="btn btn--danger btn--sm p-0 w-8 h-8" 
-                          onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
-                          title="Delete Invoice"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table className="inv-table">
+                <thead>
+                  <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Type</th>
+                    <th className="text-right">Total</th>
+                    <th className="text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {invoices.map(inv => (
+                    <tr key={inv.id}>
+                      <td className="inv-table-num">{inv.invoice_number}</td>
+                      <td>{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</td>
+                      <td>{inv.customer_name}</td>
+                      <td>
+                        <span className={`doc-badge doc-badge--${inv.document_type.toLowerCase()}`}>
+                          {inv.document_type}
+                        </span>
+                      </td>
+                      <td className="text-right">RM {Number(inv.total).toFixed(2)}</td>
+                      <td className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            className="btn btn--ghost btn--sm p-0 w-8 h-8"
+                            onClick={() => handleOpenPreview(inv.id)}
+                            title="Preview PDF"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <a
+                            href={`/invoice/edit/${inv.id}`}
+                            className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                            title="Edit Invoice"
+                          >
+                            <Edit size={16} />
+                          </a>
+                          <button
+                            className="btn btn--danger btn--sm p-0 w-8 h-8"
+                            onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                            title="Delete Invoice"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -328,7 +376,7 @@ export default function BusinessDetailPage() {
                           <div className="preview-biz-meta">{business.phone}</div>
                         </div>
                       </div>
-                      
+
                       <div className="preview-section">
                         <div className="preview-section-title">BILL TO</div>
                         <div className="preview-customer">{selectedInv.customer_name}</div>
@@ -344,26 +392,28 @@ export default function BusinessDetailPage() {
                         </div>
                       )}
 
-                      <table className="preview-table">
-                        <thead>
-                          <tr>
-                            <th>ITEM</th>
-                            <th className="text-center">QTY</th>
-                            <th className="text-center">PRICE</th>
-                            <th className="text-right">TOTAL</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedInv.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td>{item.item_name}</td>
-                              <td className="text-center">{item.quantity}</td>
-                              <td className="text-center">RM {item.price.toFixed(2)}</td>
-                              <td className="text-right">RM {item.total.toFixed(2)}</td>
+                      <div className="preview-table-wrap">
+                        <table className="preview-table">
+                          <thead>
+                            <tr>
+                              <th>ITEM</th>
+                              <th className="text-center">QTY</th>
+                              <th className="text-center">PRICE</th>
+                              <th className="text-right">TOTAL</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {selectedInv.items.map((item, idx) => (
+                              <tr key={idx}>
+                                <td>{item.item_name}</td>
+                                <td className="text-center">{item.quantity}</td>
+                                <td className="text-center">RM {item.price.toFixed(2)}</td>
+                                <td className="text-right">RM {item.total.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
 
                       <div className="preview-summary">
                         <div className="preview-summary-line">
@@ -387,13 +437,130 @@ export default function BusinessDetailPage() {
               </div>
               <footer className="modal-footer">
                 <button className="btn btn--ghost" style={{ borderRadius: '12px', padding: '10px 24px' }} onClick={() => setShowPreview(false)}>Close</button>
-                <button 
-                  className="btn btn--primary flex gap-2" 
+                <button
+                  className="btn btn--primary flex gap-2"
                   style={{ borderRadius: '12px', padding: '10px 24px' }}
                   onClick={() => selectedInv && generatePDF(selectedInv, business)}
                   disabled={previewLoading || !selectedInv}
                 >
                   <Download size={18} /> Download PDF
+                </button>
+              </footer>
+            </div>
+          </div>
+        )}
+
+        {showDeleteBusinessModal && (
+          <div
+            className="modal-overlay"
+            onClick={() => {
+              if (deletingBusiness) return;
+              setShowDeleteBusinessModal(false);
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-content signout-modal-content"
+              onClick={event => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-business-title"
+              aria-describedby="delete-business-desc"
+            >
+              <header className="modal-header">
+                <h2 id="delete-business-title">Delete business?</h2>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => setShowDeleteBusinessModal(false)}
+                  disabled={deletingBusiness}
+                  aria-label="Close delete business confirmation"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+
+              <div className="signout-modal-body" id="delete-business-desc">
+                <p>
+                  Are you sure you want to delete <strong>{business.name}</strong>? Existing invoices stay intact,
+                  but this business will be removed from your dashboard.
+                </p>
+              </div>
+
+              <footer className="modal-footer signout-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setShowDeleteBusinessModal(false)}
+                  disabled={deletingBusiness}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={confirmDeleteBusiness}
+                  disabled={deletingBusiness}
+                >
+                  {deletingBusiness ? 'Deleting…' : 'Delete Business'}
+                </button>
+              </footer>
+            </div>
+          </div>
+        )}
+
+        {pendingInvoiceDelete && (
+          <div
+            className="modal-overlay"
+            onClick={() => {
+              if (deletingInvoice) return;
+              setPendingInvoiceDelete(null);
+            }}
+            role="presentation"
+          >
+            <div
+              className="modal-content signout-modal-content"
+              onClick={event => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-invoice-title"
+              aria-describedby="delete-invoice-desc"
+            >
+              <header className="modal-header">
+                <h2 id="delete-invoice-title">Delete invoice?</h2>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => setPendingInvoiceDelete(null)}
+                  disabled={deletingInvoice}
+                  aria-label="Close delete invoice confirmation"
+                >
+                  <X size={18} />
+                </button>
+              </header>
+
+              <div className="signout-modal-body" id="delete-invoice-desc">
+                <p>
+                  Are you sure you want to delete invoice <strong>{pendingInvoiceDelete.invoiceNumber}</strong>?
+                </p>
+              </div>
+
+              <footer className="modal-footer signout-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setPendingInvoiceDelete(null)}
+                  disabled={deletingInvoice}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={confirmDeleteInvoice}
+                  disabled={deletingInvoice}
+                >
+                  {deletingInvoice ? 'Deleting…' : 'Delete Invoice'}
                 </button>
               </footer>
             </div>

@@ -21,18 +21,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="app-layout">
-      <header className="app-header flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="app-header">
+        <div className="app-header-left">
           <Link href="/dashboard" className="app-logo flex items-center gap-2">
             <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" />
-            <span className="hidden sm:inline">Invoice Mudah</span>
+            <span>Invoice Mudah</span>
           </Link>
-          <div className="h-6 w-px bg-gray-200"></div>
-          <span className="text-sm font-bold text-gray-800">Dashboard</span>
         </div>
-        <div className="app-header-right flex items-center gap-4">
-          <span className="app-user-email hidden sm:inline">{user.email}</span>
-          <SignOutButton />
+        <div className="app-header-actions app-header-right">
+          <span className="app-header-title">Dashboard</span>
+          <SignOutButton email={user.email} />
         </div>
       </header>
 

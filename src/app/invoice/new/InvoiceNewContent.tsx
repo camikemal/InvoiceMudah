@@ -69,11 +69,16 @@ export default function InvoiceNewContent() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
-          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
-          Invoice Mudah
-        </a>
-        <a href={`/business/${businessId}`} className="app-back">← {business.name}</a>
+        <div className="app-header-left">
+          <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
+            <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
+            Invoice Mudah
+          </a>
+        </div>
+        <div className="app-header-actions">
+          <span className="app-header-title">New Invoice</span>
+          <a href={`/business/${businessId}`} className="app-back-link">← {business.name}</a>
+        </div>
       </header>
 
       <main className="app-main">

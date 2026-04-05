@@ -354,12 +354,14 @@ export default function InvoiceForm({
 
       {/* ── Items ────────────────────────────────────────────── */}
       <div className="inv-section">
-        <ItemList
-          items={items}
-          onAdd={handleAddItem}
-          onRemove={handleRemoveItem}
-          onChange={handleItemChange}
-        />
+        <div className="item-list-shell">
+          <ItemList
+            items={items}
+            onAdd={handleAddItem}
+            onRemove={handleRemoveItem}
+            onChange={handleItemChange}
+          />
+        </div>
       </div>
 
       {/* ── Summary ──────────────────────────────────────────── */}

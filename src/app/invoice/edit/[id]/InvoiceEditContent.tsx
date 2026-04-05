@@ -10,7 +10,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import InvoiceForm from '@/components/InvoiceForm';
 import Image from 'next/image';
-import type { Business, UserSettings, Invoice, InvoiceItem } from '@/types/invoice';
+import type { Business, UserSettings, Invoice } from '@/types/invoice';
 
 export default function InvoiceEditContent() {
   const { id } = useParams<{ id: string }>();
@@ -100,11 +100,16 @@ export default function InvoiceEditContent() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
-          <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
-          Invoice Mudah
-        </a>
-        <a href={`/business/${business.id}`} className="app-back">← {business.name}</a>
+        <div className="app-header-left">
+          <a href="/dashboard" className="app-logo flex flex-row items-center gap-2">
+            <Image src="/logo.jpeg" alt="Invoice Mudah" width={24} height={24} className="rounded-sm object-contain" style={{ width: 'auto', height: 'auto' }} />
+            Invoice Mudah
+          </a>
+        </div>
+        <div className="app-header-actions">
+          <span className="app-header-title">Edit Invoice</span>
+          <a href={`/business/${business.id}`} className="app-back-link">← {business.name}</a>
+        </div>
       </header>
 
       <main className="app-main">
