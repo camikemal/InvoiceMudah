@@ -58,8 +58,9 @@ export default function SignupPage() {
       {/* Right form panel */}
       <div className="auth-form-panel">
         <div className="auth-form-inner">
-          <div className="auth-logo">
+          <div className="auth-logo auth-logo-row">
             <Image src="/logo.jpeg" alt="Invoice Mudah" width={48} height={48} className="rounded-md object-contain" style={{ width: 'auto', height: 'auto' }} />
+            <span className="auth-logo-text">Invoice Mudah</span>
           </div>
           <h1 className="auth-title">Create an account</h1>
           <p className="auth-subtitle">
@@ -76,6 +77,10 @@ export default function SignupPage() {
                 type="email"
                 className="auth-input"
                 placeholder="e.g. akmal@example.com"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -91,6 +96,8 @@ export default function SignupPage() {
                 type="tel"
                 className="auth-input"
                 placeholder="e.g. 012-345 6789"
+                autoComplete="tel"
+                inputMode="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
@@ -107,6 +114,7 @@ export default function SignupPage() {
                   type={showPassword ? "text" : "password"}
                   className="auth-input"
                   placeholder="••••••••••"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required

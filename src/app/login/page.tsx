@@ -53,8 +53,9 @@ export default function LoginPage() {
       {/* Right form panel */}
       <div className="auth-form-panel">
         <div className="auth-form-inner">
-          <div className="auth-logo">
+          <div className="auth-logo auth-logo-row">
             <Image src="/logo.jpeg" alt="Invoice Mudah" width={48} height={48} className="rounded-md object-contain" style={{ width: 'auto', height: 'auto' }} />
+            <span className="auth-logo-text">Invoice Mudah</span>
           </div>
           <h1 className="auth-title">Sign in</h1>
           <p className="auth-subtitle">
@@ -71,6 +72,10 @@ export default function LoginPage() {
                 type="email"
                 className="auth-input"
                 placeholder="e.g. akmal@example.com"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -87,6 +92,7 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   className="auth-input"
                   placeholder="••••••••••"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
