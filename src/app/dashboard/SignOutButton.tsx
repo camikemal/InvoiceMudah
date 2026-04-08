@@ -35,7 +35,14 @@ export default function SignOutButton({ email }: SignOutButtonProps) {
     const handleClickOutside = (event: PointerEvent) => {
       if (!showMenu) return;
       if (!menuRef.current) return;
-      if (menuRef.current.contains(event.target as Node)) return;
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        setShowMenu(false);
+        return;
+      }
+
+      if (menuRef.current.contains(target)) return;
       setShowMenu(false);
     };
 
