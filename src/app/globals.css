@@ -860,6 +860,7 @@ html, body {
 }
 
 .inv-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-field-stack { display: flex; flex-direction: column; gap: 10px; }
 
 /* Running number */
 .running-number-row {
