@@ -35,6 +35,7 @@ export interface Invoice {
   document_type: DocumentType;
   customer_name: string;
   customer_phone: string;
+  customer_email?: string;  // Optional customer email
   description: string;
   items: InvoiceItem[];
   subtotal: number;

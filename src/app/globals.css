@@ -447,6 +447,7 @@ html, body {
 /* ── Profile Menu ─────────────────────────────── */
 .profile-menu {
   position: relative;
+  z-index: 120;
 }
 
 .profile-menu-trigger {

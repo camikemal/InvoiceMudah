@@ -78,6 +78,7 @@ export default function InvoiceForm({
   // ── Customer details ──────────────────────────────────────────
   const [customerName,  setCustomerName]  = useState(initialData?.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(initialData?.customer_phone || '');
+  const [customerEmail, setCustomerEmail] = useState(initialData?.customer_email || '');
   const [description,   setDescription]  = useState(initialData?.description || 'Check in  :\nCheck out :');
 
   // ── Line items ────────────────────────────────────────────────
@@ -128,6 +129,7 @@ export default function InvoiceForm({
     document_type: docType,
     customer_name: customerName,
     customer_phone: customerPhone,
+    customer_email: customerEmail,
     description,
     items,
     subtotal,
@@ -153,6 +155,7 @@ export default function InvoiceForm({
           .update({
             invoice_number: invoice.invoice_number,
             customer_name:  invoice.customer_name,
+            customer_email: invoice.customer_email,
             customer_phone: invoice.customer_phone,
             description:    invoice.description,
             discount:       invoice.discount,
@@ -192,6 +195,7 @@ export default function InvoiceForm({
             user_id:        userId,
             business_id:    invoice.business_id,
             invoice_number: invoice.invoice_number,
+            customer_email: invoice.customer_email,
             customer_name:  invoice.customer_name,
             customer_phone: invoice.customer_phone,
             description:    invoice.description,
@@ -336,6 +340,16 @@ export default function InvoiceForm({
               onChange={e => setCustomerPhone(e.target.value)}
             />
           </div>
+        </div>
+        <div className="form-field">
+          <label>Customer Email</label>
+          <input
+            id="inv-customer-email"
+            type="email"
+            placeholder="e.g. customer@email.com"
+            value={customerEmail}
+            onChange={e => setCustomerEmail(e.target.value)}
+          />
         </div>
       </div>
 

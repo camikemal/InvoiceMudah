@@ -1,8 +1,3 @@
-/**
- * generatePDF — matches the reference receipt design.
- * Updated: uses invoice.document_type in the top-left header label.
- */
-
 import type { Invoice, Business } from '@/types/invoice';
 import { jsPDF } from 'jspdf';
 
@@ -51,12 +46,10 @@ function rm(val: number): string {
 export function generatePDF(invoice: Invoice, business: Business): void {
   const doc   = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
   const mL = 18, mR = pageW - 18;
 
   let y = 24;
 
-  // ── Header (Doc Type Badge) ──────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   const docTypeLabel = invoice.document_type.toUpperCase();
@@ -67,7 +60,6 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.setTextColor(...WHITE);
   doc.text(docTypeLabel, mL + 4, y + 5.5);
 
-  // ── Business name (top right) ────────────────────────────────
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(...TEXT_DARK);
@@ -75,7 +67,6 @@ export function generatePDF(invoice: Invoice, business: Business): void {
 
   y += 12;
 
-  // ── Invoice Meta (left) ──────────────────────────────────────
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...TEXT_DARK);
@@ -83,26 +74,24 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   y += 5;
   doc.text(`DATE: ${formatDate(invoice.invoice_date)}`, mL, y);
 
-  // ── Business Info (right, continues below name) ───────────────
   doc.setFontSize(9);
   doc.setTextColor(...TEXT_MED);
-  let bizY = 24 + 11; // below biz name
+  let bizY = 24 + 11;
   const locLines = wrapText(doc, business.location, 75);
   for (const line of locLines) { doc.text(line, mR, bizY, { align: 'right' }); bizY += 4.5; }
   doc.text(business.phone, mR, bizY, { align: 'right' });
 
   y = Math.max(y + 12, bizY + 12);
 
-  // ── BILL TO ──────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...TEXT_DARK);
   doc.text('BILL TO', mL, y); y += 6;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   const customerLines = wrapText(doc, invoice.customer_name, 80);
   for (const line of customerLines) { doc.text(line, mL, y); y += 5; }
   if (invoice.customer_phone) { doc.text(invoice.customer_phone, mL, y); y += 5; }
+  if (invoice.customer_email) { doc.text(invoice.customer_email, mL, y); y += 5; }
   y += 8;
 
-  // ── DESCRIPTION ──────────────────────────────────────────────
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXT_DARK);
   doc.text('DESCRIPTION', mL, y); y += 6;
   if (invoice.description) {
@@ -112,7 +101,6 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   }
   y += 8;
 
-  // ── Items table ──────────────────────────────────────────────
   const cItem = mL, cProp = mL + 12, cNight = mL + 90, cPrice = mL + 120, cTotal = mR - 2;
   const tW = mR - mL, rowH = 10;
 
@@ -120,11 +108,11 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.rect(mL, y, tW, rowH, 'F');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...WHITE);
   const hY = y + 6.5;
-  doc.text('ITEM',           cItem + 2, hY);
-  doc.text('PROPERTY / ITEM NAME', cProp + 2, hY);
-  doc.text('NIGHT / QTY',    cNight,    hY, { align: 'center' });
-  doc.text('PRICE (RM)',     cPrice,    hY, { align: 'center' });
-  doc.text('TOTAL',          cTotal,    hY, { align: 'right' });
+  doc.text('No.', cItem + 2, hY);
+  doc.text('ITEM', cProp + 2, hY);
+  doc.text('QTY', cNight, hY, { align: 'center' });
+  doc.text('PRICE (RM)', cPrice, hY, { align: 'center' });
+  doc.text('TOTAL', cTotal, hY, { align: 'right' });
   y += rowH;
 
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
@@ -133,31 +121,29 @@ export function generatePDF(invoice: Invoice, business: Business): void {
     else { doc.setFillColor(...WHITE); doc.rect(mL, y, tW, rowH, 'F'); }
     doc.setTextColor(...TEXT_DARK);
     const rY = y + 6.5;
-    doc.text(`${idx + 1}.`,                       cItem + 2, rY);
-    doc.text(item.item_name.toUpperCase(),         cProp + 2, rY);
-    doc.text(String(item.quantity),                cNight,    rY, { align: 'center' });
-    doc.text(item.price.toFixed(2),                cPrice,    rY, { align: 'center' });
-    doc.text(item.total.toFixed(2),                cTotal,    rY, { align: 'right' });
+    doc.text(`${idx + 1}.`, cItem + 2, rY);
+    doc.text(item.item_name.toUpperCase(), cProp + 2, rY);
+    doc.text(String(item.quantity), cNight, rY, { align: 'center' });
+    doc.text(item.price.toFixed(2), cPrice, rY, { align: 'center' });
+    doc.text(item.total.toFixed(2), cTotal, rY, { align: 'right' });
     y += rowH;
   });
   y += 6;
 
-  // ── Summary ──────────────────────────────────────────────────
   const sumLX = cPrice + 5, sumVX = mR - 2;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...TEXT_MED);
-  doc.text('Sub Total', sumLX, y, { align: 'right' }); 
+  doc.text('Sub Total', sumLX, y, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.text(rm(invoice.subtotal), sumVX, y, { align: 'right' }); y += 6;
   
   doc.setFont('helvetica', 'bold');
-  doc.text('Discount',  sumLX, y, { align: 'right' }); 
+  doc.text('Discount', sumLX, y, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.text(rm(invoice.discount), sumVX, y, { align: 'right' }); y += 8;
 
-  // Total box (matching the screenshot/form aesthetic)
   const tbW = 90, tbX = mR - tbW, tbH = 14;
   doc.setFillColor(...LIGHT_GREY);
-  doc.setDrawColor(220, 220, 220); // subtle border
+  doc.setDrawColor(220, 220, 220);
   doc.roundedRect(tbX, y, tbW, tbH, 3, 3, 'FD');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...TEXT_DARK);
   doc.text('TOTAL', tbX + 6, y + 9);
@@ -165,7 +151,6 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.text(rm(invoice.total), mR - 6, y + 9.5, { align: 'right' });
   y += tbH + 16;
 
-  // ── Payment info ─────────────────────────────────────────────
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXT_DARK);
   doc.text('PAYMENT INFORMATION', mL, y); y += 6;
   doc.setFontSize(9.5); doc.setTextColor(...TEXT_MED);
@@ -183,7 +168,6 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   }
   y += 8;
 
-  // ── Terms ────────────────────────────────────────────────────
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXT_DARK);
   doc.text('TERM AND CONDITIONS', mL, y); y += 6;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...TEXT_MED);

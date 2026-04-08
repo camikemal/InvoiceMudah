@@ -32,7 +32,7 @@ export default function SignOutButton({ email }: SignOutButtonProps) {
       }
     };
 
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: PointerEvent) => {
       if (!showMenu) return;
       if (!menuRef.current) return;
       if (menuRef.current.contains(event.target as Node)) return;
@@ -40,10 +40,10 @@ export default function SignOutButton({ email }: SignOutButtonProps) {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("pointerdown", handleClickOutside);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("pointerdown", handleClickOutside);
     };
   }, [showConfirm, showMenu]);
 
