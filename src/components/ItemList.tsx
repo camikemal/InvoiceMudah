@@ -26,9 +26,9 @@ export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListP
     <div className="item-list">
       {/* ── Table header ──────────────────────────────────── */}
       <div className="item-table-head">
-        <span className="it-col-num">ITEM</span>
-        <span className="it-col-name">PROPERTY / ITEM NAME</span>
-        <span className="it-col-qty">NIGHT / QTY</span>
+        <span className="it-col-num">No.</span>
+        <span className="it-col-name">ITEM</span>
+        <span className="it-col-qty">QTY</span>
         <span className="it-col-price">PRICE (RM)</span>
         <span className="it-col-total">TOTAL</span>
         <span className="it-col-action" />
