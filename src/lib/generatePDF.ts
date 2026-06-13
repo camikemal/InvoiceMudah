@@ -43,6 +43,14 @@ function rm(val: number): string {
   return `RM ${val.toFixed(2)}`;
 }
 
+function drawLabelValue(doc: jsPDF, label: string, value: string, x: number, y: number): void {
+  doc.setFont('helvetica', 'bold');
+  doc.text(label, x, y);
+  const labelW = doc.getTextWidth(label);
+  doc.setFont('helvetica', 'normal');
+  doc.text(value, x + labelW + 1.5, y);
+}
+
 export function generatePDF(invoice: Invoice, business: Business): void {
   const doc   = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -70,7 +78,7 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...TEXT_DARK);
-  doc.text(`INVOICE NUMBER: ${invoice.invoice_number}`, mL, y);
+  doc.text(`INV NO: ${invoice.invoice_number}`, mL, y);
   y += 5;
   doc.text(`DATE: ${formatDate(invoice.invoice_date)}`, mL, y);
 
@@ -155,16 +163,13 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.text('PAYMENT INFORMATION', mL, y); y += 6;
   doc.setFontSize(9.5); doc.setTextColor(...TEXT_MED);
   if (business.bank) {
-    doc.setFont('helvetica', 'bold'); doc.text('Bank: ', mL, y);
-    doc.setFont('helvetica', 'normal'); doc.text(business.bank, mL + doc.getTextWidth('Bank: '), y); y += 5;
+    drawLabelValue(doc, 'Bank: ', business.bank, mL, y); y += 5;
   }
   if (business.account_name) {
-    doc.setFont('helvetica', 'bold'); doc.text('Name: ', mL, y);
-    doc.setFont('helvetica', 'normal'); doc.text(business.account_name, mL + doc.getTextWidth('Name: '), y); y += 5;
+    drawLabelValue(doc, 'Name: ', business.account_name, mL, y); y += 5;
   }
   if (business.account_number) {
-    doc.setFont('helvetica', 'bold'); doc.text('Account: ', mL, y);
-    doc.setFont('helvetica', 'normal'); doc.text(business.account_number, mL + doc.getTextWidth('Account: '), y); y += 5;
+    drawLabelValue(doc, 'Account: ', business.account_number, mL, y); y += 5;
   }
   y += 8;
 

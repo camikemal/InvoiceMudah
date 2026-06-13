@@ -286,7 +286,7 @@ export default function InvoiceForm({
               </button>
             ))}
           </div>
-          <div className="inv-header-meta">INVOICE NUMBER: {invoiceNumber}</div>
+          <div className="inv-header-meta">INV NO: {invoiceNumber}</div>
           <div className="inv-header-meta">DATE: {formatDisplayDate(today)}</div>
         </div>
         <div className="inv-header-right">
