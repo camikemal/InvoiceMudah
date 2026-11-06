@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Edit, Trash2, X } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { useToast } from '@/components/Toast';
+import Tooltip from '@/components/Tooltip';
 import { friendlyDbError } from '@/lib/invoices';
 import { customerSchema, firstError } from '@/lib/validation';
 import { isSale, type InvoiceSummary } from '@/lib/stats';
@@ -178,25 +179,29 @@ export default function CustomersPanel({ businessId, userId, invoices }: Custome
                     <td>{s?.last ? new Date(s.last).toLocaleDateString('en-GB') : '—'}</td>
                     <td className="text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm p-0 w-8 h-8"
-                          title="Edit customer"
-                          onClick={() => {
-                            setDraft({ id: c.id, name: c.name, phone: c.phone ?? '', email: c.email ?? '', notes: c.notes ?? '' });
-                            setFormError('');
-                          }}
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn--danger btn--sm p-0 w-8 h-8"
-                          title="Delete customer"
-                          onClick={() => setPendingDelete(c)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <Tooltip label="Edit customer">
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm p-0 w-8 h-8"
+                            aria-label="Edit customer"
+                            onClick={() => {
+                              setDraft({ id: c.id, name: c.name, phone: c.phone ?? '', email: c.email ?? '', notes: c.notes ?? '' });
+                              setFormError('');
+                            }}
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label="Delete customer">
+                          <button
+                            type="button"
+                            className="btn btn--danger btn--sm p-0 w-8 h-8"
+                            aria-label="Delete customer"
+                            onClick={() => setPendingDelete(c)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                   </tr>

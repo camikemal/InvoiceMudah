@@ -13,6 +13,7 @@ import BusinessForm from '@/components/BusinessForm';
 import CustomersPanel from '@/components/CustomersPanel';
 import MarkPaidModal from '@/components/MarkPaidModal';
 import StatusBadge from '@/components/StatusBadge';
+import Tooltip from '@/components/Tooltip';
 import { useToast } from '@/components/Toast';
 import Image from 'next/image';
 import type { Business, Invoice } from '@/types/invoice';
@@ -461,6 +462,7 @@ export default function BusinessDetailPage() {
                   {filtered.map(inv => {
                     const status = displayStatus(inv);
                     const canPay = inv.document_type === 'INVOICE' && inv.status !== 'CANCELLED';
+                    const docLabel = inv.document_type.toLowerCase();
                     return (
                     <tr key={inv.id}>
                       <td className="inv-table-num">{inv.invoice_number}</td>
@@ -487,54 +489,66 @@ export default function BusinessDetailPage() {
                       <td className="text-right">{formatRM(inv.total)}</td>
                       <td className="text-right">
                         <div className="flex justify-end gap-2">
-                          <button
-                            className="btn btn--ghost btn--sm p-0 w-8 h-8"
-                            onClick={() => handleOpenPreview(inv.id)}
-                            title="Preview PDF"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          <a
-                            href={`/invoice/edit/${inv.id}`}
-                            className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
-                            title="Edit Invoice"
-                          >
-                            <Edit size={16} />
-                          </a>
-                          {canPay && (
+                          <Tooltip label="Preview & download PDF">
                             <button
-                              className={`btn btn--ghost btn--sm p-0 w-8 h-8${status === 'PAID' ? ' btn--success' : ''}`}
-                              onClick={() => setPaymentFor(inv)}
-                              title={status === 'PAID' ? 'Payment details' : 'Record payment'}
+                              className="btn btn--ghost btn--sm p-0 w-8 h-8"
+                              onClick={() => handleOpenPreview(inv.id)}
+                              aria-label="Preview and download PDF"
                             >
-                              <CircleDollarSign size={16} />
+                              <Eye size={16} />
                             </button>
+                          </Tooltip>
+                          <Tooltip label={`Edit ${docLabel}`}>
+                            <a
+                              href={`/invoice/edit/${inv.id}`}
+                              className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                              aria-label={`Edit ${docLabel}`}
+                            >
+                              <Edit size={16} />
+                            </a>
+                          </Tooltip>
+                          {canPay && (
+                            <Tooltip label={status === 'PAID' ? 'Paid · view or undo payment' : 'Record payment'}>
+                              <button
+                                className={`btn btn--ghost btn--sm p-0 w-8 h-8${status === 'PAID' ? ' btn--success' : ''}`}
+                                onClick={() => setPaymentFor(inv)}
+                                aria-label={status === 'PAID' ? 'View or undo payment' : 'Record payment'}
+                              >
+                                <CircleDollarSign size={16} />
+                              </button>
+                            </Tooltip>
                           )}
                           {inv.document_type === 'QUOTATION' && (
-                            <a
-                              href={`/invoice/new?businessId=${id}&from=${inv.id}&type=INVOICE`}
-                              className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
-                              title="Convert to Invoice"
-                            >
-                              <FileOutput size={16} />
-                            </a>
+                            <Tooltip label="Convert to invoice">
+                              <a
+                                href={`/invoice/new?businessId=${id}&from=${inv.id}&type=INVOICE`}
+                                className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                                aria-label="Convert to invoice"
+                              >
+                                <FileOutput size={16} />
+                              </a>
+                            </Tooltip>
                           )}
                           {inv.document_type === 'INVOICE' && inv.status !== 'CANCELLED' && (
-                            <a
-                              href={`/invoice/new?businessId=${id}&from=${inv.id}&type=RECEIPT`}
-                              className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
-                              title="Issue Receipt"
-                            >
-                              <Receipt size={16} />
-                            </a>
+                            <Tooltip label="Issue receipt">
+                              <a
+                                href={`/invoice/new?businessId=${id}&from=${inv.id}&type=RECEIPT`}
+                                className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                                aria-label="Issue receipt"
+                              >
+                                <Receipt size={16} />
+                              </a>
+                            </Tooltip>
                           )}
-                          <button
-                            className="btn btn--danger btn--sm p-0 w-8 h-8"
-                            onClick={() => setPendingInvoiceDelete({ id: inv.id, invoiceNumber: inv.invoice_number })}
-                            title="Delete Invoice"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <Tooltip label={`Delete ${docLabel}`}>
+                            <button
+                              className="btn btn--danger btn--sm p-0 w-8 h-8"
+                              onClick={() => setPendingInvoiceDelete({ id: inv.id, invoiceNumber: inv.invoice_number })}
+                              aria-label={`Delete ${docLabel}`}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </Tooltip>
                         </div>
                       </td>
                     </tr>

@@ -1507,3 +1507,23 @@ html, body {
   .filter-date { flex: 1 1 calc(50% - 4px); }
   .bar-label { font-size: 8px; }
 }
+
+/* ── Tooltip ─────────────────────────────────── */
+.tooltip-anchor { display: inline-flex; }
+.tooltip {
+  position: fixed; z-index: 1100; pointer-events: none;
+  transform: translate(-50%, -100%);
+  background: #0f172a; color: #fff;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 5px 8px; border-radius: 6px;
+  box-shadow: var(--shadow);
+  animation: tooltip-in 0.12s ease-out;
+}
+.tooltip::after {
+  content: ''; position: absolute; left: 50%; top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: #0f172a;
+}
+.tooltip--below { transform: translate(-50%, 0); }
+.tooltip--below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: #0f172a; }
+@keyframes tooltip-in { from { opacity: 0; } to { opacity: 1; } }
