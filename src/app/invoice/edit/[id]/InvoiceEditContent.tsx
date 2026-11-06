@@ -10,6 +10,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import InvoiceForm from '@/components/InvoiceForm';
 import Image from 'next/image';
+import { fetchInvoiceWithItems } from '@/lib/invoices';
 import type { Business, UserSettings, Invoice } from '@/types/invoice';
 
 export default function InvoiceEditContent() {
@@ -31,22 +32,11 @@ export default function InvoiceEditContent() {
       if (!user) { router.push('/login'); return; }
       setUserId(user.id);
 
-      // 1. Load the invoice header
-      const { data: inv, error: invErr } = await supabase
-        .from('invoices')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (invErr || !inv) { router.push('/dashboard'); return; }
+      // 1. Load the invoice with its items
+      const inv = await fetchInvoiceWithItems(supabase, id);
+      if (!inv) { router.push('/dashboard'); return; }
 
-      // 2. Load invoice items
-      const { data: items } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .eq('invoice_id', id)
-        .order('sort_order', { ascending: true });
-
-      // 3. Load the business
+      // 2. Load the business
       const { data: biz } = await supabase
         .from('businesses')
         .select('*')
@@ -55,7 +45,7 @@ export default function InvoiceEditContent() {
       if (!biz) { router.push('/dashboard'); return; }
       setBusiness(biz as Business);
 
-      // 4. Load user settings
+      // 3. Load user settings
       const { data: settings } = await supabase
         .from('user_settings')
         .select('*')
@@ -68,17 +58,7 @@ export default function InvoiceEditContent() {
           : { user_id: user.id, last_invoice_number: 0 }
       );
 
-      // Construct InitialData for InvoiceForm
-      setInitialData({
-        ...inv,
-        items: (items || []).map(it => ({
-          id: it.id,
-          item_name: it.item_name,
-          quantity: it.quantity,
-          price: it.price,
-          total: it.total
-        }))
-      } as Invoice);
+      setInitialData(inv);
 
       setLoading(false);
     }

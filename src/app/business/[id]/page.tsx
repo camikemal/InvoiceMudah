@@ -2,55 +2,71 @@
 
 /**
  * /business/[id] — Business detail page
- * Shows business info, past invoices, and a "Create Invoice" button.
+ * Shows business info, summary stats, documents (with filters, payment
+ * tracking and conversion), saved customers, and a "Create Invoice" button.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import BusinessForm from '@/components/BusinessForm';
+import CustomersPanel from '@/components/CustomersPanel';
+import MarkPaidModal from '@/components/MarkPaidModal';
+import StatusBadge from '@/components/StatusBadge';
+import { useToast } from '@/components/Toast';
 import Image from 'next/image';
 import type { Business, Invoice } from '@/types/invoice';
+import { BUSINESS_TYPES, displayStatus, formatRM, type DisplayStatus } from '@/types/invoice';
 import { generatePDF } from '@/lib/generatePDF';
-import { Eye, Edit, Trash2, X, Download } from 'lucide-react';
-
-interface PastInvoice {
-  id: string;
-  invoice_number: string;
-  invoice_date: string;
-  customer_name: string;
-  document_type: string;
-  total: number;
-}
-
-interface InvoiceItemRow {
-  id: string;
-  item_name: string;
-  quantity: number;
-  price: number;
-  total: number;
-}
+import { fetchInvoiceWithItems, friendlyDbError } from '@/lib/invoices';
+import { computeTotals, currentMonthKey, SUMMARY_COLUMNS, type InvoiceSummary } from '@/lib/stats';
+import { downloadInvoicesCsv } from '@/lib/csv';
+import { Eye, Edit, Trash2, X, Download, CircleDollarSign, FileOutput, Receipt } from 'lucide-react';
 
 interface PendingInvoiceDelete {
   id: string;
   invoiceNumber: string;
 }
 
+type StatusFilter = 'ALL' | 'OUTSTANDING' | 'OVERDUE' | 'PAID' | 'DRAFT';
+type TypeFilter = 'ALL' | 'INVOICE' | 'RECEIPT' | 'QUOTATION';
+type Tab = 'documents' | 'customers';
+
+const STATUS_FILTERS: { value: StatusFilter; label: string; match: (s: DisplayStatus) => boolean }[] = [
+  { value: 'ALL',         label: 'All',         match: () => true },
+  { value: 'OUTSTANDING', label: 'Outstanding', match: s => s === 'UNPAID' || s === 'PARTIAL' || s === 'OVERDUE' },
+  { value: 'OVERDUE',     label: 'Overdue',     match: s => s === 'OVERDUE' },
+  { value: 'PAID',        label: 'Paid',        match: s => s === 'PAID' },
+  { value: 'DRAFT',       label: 'Quotations',  match: s => s === 'DRAFT' },
+];
+
 export default function BusinessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const supabase = createClient();
+  const toast = useToast();
 
   const [userId, setUserId] = useState('');
   const [business, setBusiness] = useState<Business | null>(null);
-  const [invoices, setInvoices] = useState<PastInvoice[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('documents');
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Preview Modal state
   const [showPreview, setShowPreview] = useState(false);
   const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Payment modal
+  const [paymentFor, setPaymentFor] = useState<InvoiceSummary | null>(null);
 
   // Delete confirmation states
   const [showDeleteBusinessModal, setShowDeleteBusinessModal] = useState(false);
@@ -78,22 +94,19 @@ export default function BusinessDetailPage() {
       if (!user) { router.push('/login'); return; }
       setUserId(user.id);
 
-      // Load business
-      const { data: biz } = await supabase
-        .from('businesses')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const [{ data: biz }, { data: invs, error: invErr }] = await Promise.all([
+        supabase.from('businesses').select('*').eq('id', id).single(),
+        supabase
+          .from('invoices')
+          .select(SUMMARY_COLUMNS)
+          .eq('business_id', id)
+          .order('invoice_date', { ascending: false })
+          .order('created_at', { ascending: false }),
+      ]);
       if (!biz) { router.push('/dashboard'); return; }
       setBusiness(biz as Business);
-
-      // Load past invoices for this business
-      const { data: invs } = await supabase
-        .from('invoices')
-        .select('id, invoice_number, invoice_date, customer_name, document_type, total')
-        .eq('business_id', id)
-        .order('created_at', { ascending: false });
-      setInvoices((invs ?? []) as PastInvoice[]);
+      if (invErr) toast.error(friendlyDbError(invErr));
+      setInvoices((invs ?? []) as InvoiceSummary[]);
 
       setLoading(false);
     }
@@ -101,13 +114,42 @@ export default function BusinessDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const totals = useMemo(() => computeTotals(invoices), [invoices]);
+  const monthTotals = useMemo(() => {
+    const key = currentMonthKey();
+    return computeTotals(invoices.filter(i => i.invoice_date.startsWith(key)));
+  }, [invoices]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const statusMatch = STATUS_FILTERS.find(f => f.value === statusFilter)!.match;
+    return invoices.filter(inv => {
+      if (typeFilter !== 'ALL' && inv.document_type !== typeFilter) return false;
+      if (dateFrom && inv.invoice_date < dateFrom) return false;
+      if (dateTo && inv.invoice_date > dateTo) return false;
+      if (!statusMatch(displayStatus(inv))) return false;
+      if (q) {
+        const hay = `${inv.invoice_number} ${inv.customer_name} ${inv.customer_phone ?? ''} ${inv.customer_email ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [invoices, search, statusFilter, typeFilter, dateFrom, dateTo]);
+
+  const filtersActive = search || statusFilter !== 'ALL' || typeFilter !== 'ALL' || dateFrom || dateTo;
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('ALL');
+    setTypeFilter('ALL');
+    setDateFrom('');
+    setDateTo('');
+  };
+
   const handleBusinessUpdated = (updated: Business) => {
     setBusiness(updated);
     setEditing(false);
-  };
-
-  const handleDelete = () => {
-    setShowDeleteBusinessModal(true);
+    toast.success('Business updated');
   };
 
   const confirmDeleteBusiness = async () => {
@@ -120,7 +162,7 @@ export default function BusinessDetailPage() {
       .eq('id', id);
 
     if (error) {
-      alert(error.message);
+      toast.error(friendlyDbError(error));
       setDeletingBusiness(false);
     } else {
       router.push('/dashboard');
@@ -132,38 +174,16 @@ export default function BusinessDetailPage() {
     setPreviewLoading(true);
     setShowPreview(true);
 
-    // Fetch full invoice data including items
-    const { data: inv } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', invId)
-      .single();
-
-    if (!inv) { setShowPreview(false); setPreviewLoading(false); return; }
-
-    const { data: items } = await supabase
-      .from('invoice_items')
-      .select('*')
-      .eq('invoice_id', invId)
-      .order('sort_order', { ascending: true });
-
-    const fullInvoice: Invoice = {
-      ...inv,
-      items: (items || []).map((it: InvoiceItemRow) => ({
-        id: it.id,
-        item_name: it.item_name,
-        quantity: it.quantity,
-        price: it.price,
-        total: it.total
-      }))
-    };
+    const fullInvoice = await fetchInvoiceWithItems(supabase, invId);
+    if (!fullInvoice) {
+      setShowPreview(false);
+      setPreviewLoading(false);
+      toast.error('Could not load this document.');
+      return;
+    }
 
     setSelectedInv(fullInvoice);
     setPreviewLoading(false);
-  };
-
-  const handleDeleteInvoice = (invId: string, invNum: string) => {
-    setPendingInvoiceDelete({ id: invId, invoiceNumber: invNum });
   };
 
   const confirmDeleteInvoice = async () => {
@@ -177,17 +197,33 @@ export default function BusinessDetailPage() {
       .eq('id', pendingInvoiceDelete.id);
 
     if (error) {
-      alert(error.message);
+      toast.error(friendlyDbError(error));
     } else {
-      setInvoices((prev: PastInvoice[]) => prev.filter((i: PastInvoice) => i.id !== pendingInvoiceDelete.id));
+      setInvoices(prev => prev.filter(i => i.id !== pendingInvoiceDelete.id));
+      toast.success(`${pendingInvoiceDelete.invoiceNumber} deleted`);
       setPendingInvoiceDelete(null);
     }
 
     setDeletingInvoice(false);
   };
 
+  const handlePaymentUpdated = (patch: Partial<InvoiceSummary>) => {
+    if (!paymentFor) return;
+    setInvoices(prev => prev.map(i => (i.id === paymentFor.id ? { ...i, ...patch } : i)));
+    toast.success(patch.status === 'PAID' ? 'Marked as paid' : patch.status === 'PARTIAL' ? 'Partial payment recorded' : 'Marked as unpaid');
+    setPaymentFor(null);
+  };
+
+  const handleExport = () => {
+    if (!business) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadInvoicesCsv(filtered, `${business.name.replace(/[^\w-]+/g, '_')}_${stamp}.csv`);
+  };
+
   if (loading) return <div className="page-loading"><div className="spinner" />Loading…</div>;
   if (!business) return null;
+
+  const typeLabel = BUSINESS_TYPES.find(t => t.value === business.business_type)?.label;
 
   return (
     <div className="app-layout">
@@ -213,13 +249,14 @@ export default function BusinessDetailPage() {
         <div className="biz-detail-header">
           <div>
             <h1 className="biz-detail-name">{business.name}</h1>
+            {typeLabel && <span className="biz-type-tag">{typeLabel}</span>}
             <p className="biz-detail-meta">{business.location}</p>
             <p className="biz-detail-meta">{business.phone}</p>
           </div>
           <div className="biz-detail-actions">
             <button
               className="btn btn--danger"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteBusinessModal(true)}
               disabled={loading}
             >
               Delete
@@ -276,12 +313,123 @@ export default function BusinessDetailPage() {
           </div>
         )}
 
-        {/* ── Past Invoices ─────────────────────────────────── */}
+        {/* ── Summary stats ─────────────────────────────────── */}
+        <div className="stat-grid">
+          <div className="stat-card">
+            <span className="stat-label">Billed this month</span>
+            <span className="stat-value">{formatRM(monthTotals.billed)}</span>
+            <span className="stat-sub">Collected {formatRM(monthTotals.collected)}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Outstanding</span>
+            <span className="stat-value">{formatRM(totals.outstanding)}</span>
+            <span className="stat-sub">All time</span>
+          </div>
+          <div className={`stat-card${totals.overdueCount ? ' stat-card--alert' : ''}`}>
+            <span className="stat-label">Overdue</span>
+            <span className="stat-value">{totals.overdueCount}</span>
+            <span className="stat-sub">{formatRM(totals.overdueAmount)}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Total billed</span>
+            <span className="stat-value">{formatRM(totals.billed)}</span>
+            <span className="stat-sub">{invoices.length} document{invoices.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        {/* ── Tabs ──────────────────────────────────────────── */}
+        <div className="tab-bar" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'documents'}
+            className={`tab-btn${tab === 'documents' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('documents')}
+          >
+            Documents
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'customers'}
+            className={`tab-btn${tab === 'customers' ? ' tab-btn--active' : ''}`}
+            onClick={() => setTab('customers')}
+          >
+            Customers
+          </button>
+        </div>
+
+        {tab === 'customers' && (
+          <CustomersPanel businessId={id} userId={userId} invoices={invoices} />
+        )}
+
+        {/* ── Documents ─────────────────────────────────────── */}
+        {tab === 'documents' && (
         <section className="past-invoices">
           <div className="section-heading">
-            <h2>Past Invoices</h2>
-            <span className="section-count">{invoices.length} record{invoices.length !== 1 ? 's' : ''}</span>
+            <h2>Documents</h2>
+            <span className="section-count">
+              {filtersActive ? `${filtered.length} of ${invoices.length}` : invoices.length} record{invoices.length !== 1 ? 's' : ''}
+            </span>
           </div>
+
+          {invoices.length > 0 && (
+            <>
+              <div className="chip-group" role="group" aria-label="Filter by status">
+                {STATUS_FILTERS.map(f => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    className={`chip${statusFilter === f.value ? ' chip--active' : ''}`}
+                    onClick={() => setStatusFilter(f.value)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="filter-bar">
+                <input
+                  className="filter-search"
+                  placeholder="Search number, customer, phone…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  aria-label="Search documents"
+                />
+                <select
+                  className="filter-select"
+                  value={typeFilter}
+                  onChange={e => setTypeFilter(e.target.value as TypeFilter)}
+                  aria-label="Filter by type"
+                >
+                  <option value="ALL">All types</option>
+                  <option value="INVOICE">Invoices</option>
+                  <option value="RECEIPT">Receipts</option>
+                  <option value="QUOTATION">Quotations</option>
+                </select>
+                <input
+                  type="date"
+                  className="filter-date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  aria-label="From date"
+                />
+                <input
+                  type="date"
+                  className="filter-date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={e => setDateTo(e.target.value)}
+                  aria-label="To date"
+                />
+                {filtersActive && (
+                  <button type="button" className="btn btn--ghost" onClick={clearFilters}>Clear</button>
+                )}
+                <button type="button" className="btn btn--ghost" onClick={handleExport} disabled={filtered.length === 0}>
+                  <Download size={14} /> CSV
+                </button>
+              </div>
+            </>
+          )}
 
           {invoices.length === 0 ? (
             <div className="empty-state">
@@ -289,6 +437,11 @@ export default function BusinessDetailPage() {
               <a href={`/invoice/new?businessId=${id}`} className="btn btn--primary">
                 Create First Invoice
               </a>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty-state">
+              <p>No documents match these filters.</p>
+              <button type="button" className="btn btn--ghost" onClick={clearFilters}>Clear filters</button>
             </div>
           ) : (
             <div className="table-scroll">
@@ -299,22 +452,39 @@ export default function BusinessDetailPage() {
                     <th>Date</th>
                     <th>Customer</th>
                     <th>Type</th>
+                    <th>Status</th>
                     <th className="text-right">Total</th>
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map(inv => (
+                  {filtered.map(inv => {
+                    const status = displayStatus(inv);
+                    const canPay = inv.document_type === 'INVOICE' && inv.status !== 'CANCELLED';
+                    return (
                     <tr key={inv.id}>
                       <td className="inv-table-num">{inv.invoice_number}</td>
-                      <td>{new Date(inv.invoice_date).toLocaleDateString('en-GB')}</td>
+                      <td>
+                        {new Date(inv.invoice_date).toLocaleDateString('en-GB')}
+                        {inv.due_date && inv.document_type === 'INVOICE' && (
+                          <div className={`cell-sub${status === 'OVERDUE' ? ' cell-sub--alert' : ''}`}>
+                            Due {new Date(inv.due_date).toLocaleDateString('en-GB')}
+                          </div>
+                        )}
+                      </td>
                       <td>{inv.customer_name}</td>
                       <td>
                         <span className={`doc-badge doc-badge--${inv.document_type.toLowerCase()}`}>
                           {inv.document_type}
                         </span>
                       </td>
-                      <td className="text-right">RM {Number(inv.total).toFixed(2)}</td>
+                      <td>
+                        <StatusBadge status={status} />
+                        {status === 'PARTIAL' && (
+                          <div className="cell-sub">{formatRM(inv.amount_paid)} paid</div>
+                        )}
+                      </td>
+                      <td className="text-right">{formatRM(inv.total)}</td>
                       <td className="text-right">
                         <div className="flex justify-end gap-2">
                           <button
@@ -331,9 +501,36 @@ export default function BusinessDetailPage() {
                           >
                             <Edit size={16} />
                           </a>
+                          {canPay && (
+                            <button
+                              className={`btn btn--ghost btn--sm p-0 w-8 h-8${status === 'PAID' ? ' btn--success' : ''}`}
+                              onClick={() => setPaymentFor(inv)}
+                              title={status === 'PAID' ? 'Payment details' : 'Record payment'}
+                            >
+                              <CircleDollarSign size={16} />
+                            </button>
+                          )}
+                          {inv.document_type === 'QUOTATION' && (
+                            <a
+                              href={`/invoice/new?businessId=${id}&from=${inv.id}&type=INVOICE`}
+                              className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                              title="Convert to Invoice"
+                            >
+                              <FileOutput size={16} />
+                            </a>
+                          )}
+                          {inv.document_type === 'INVOICE' && inv.status !== 'CANCELLED' && (
+                            <a
+                              href={`/invoice/new?businessId=${id}&from=${inv.id}&type=RECEIPT`}
+                              className="btn btn--ghost btn--sm p-0 w-8 h-8 flex items-center justify-center"
+                              title="Issue Receipt"
+                            >
+                              <Receipt size={16} />
+                            </a>
+                          )}
                           <button
                             className="btn btn--danger btn--sm p-0 w-8 h-8"
-                            onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                            onClick={() => setPendingInvoiceDelete({ id: inv.id, invoiceNumber: inv.invoice_number })}
                             title="Delete Invoice"
                           >
                             <Trash2 size={16} />
@@ -341,12 +538,14 @@ export default function BusinessDetailPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </section>
+        )}
 
         {/* ── Preview Modal ─────────────────────────────────── */}
         {showPreview && (
@@ -366,9 +565,15 @@ export default function BusinessDetailPage() {
                     <div className="preview-card">
                       <div className="preview-header">
                         <div className="preview-header-left">
-                          <div className="preview-badge">{selectedInv.document_type}</div>
+                          <div className="flex gap-2 items-center">
+                            <div className="preview-badge">{selectedInv.document_type}</div>
+                            <StatusBadge status={displayStatus(selectedInv)} />
+                          </div>
                           <div className="preview-meta-bold">{selectedInv.document_type} NUMBER: {selectedInv.invoice_number}</div>
                           <div className="preview-meta-bold">DATE: {new Date(selectedInv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase()}</div>
+                          {selectedInv.due_date && selectedInv.document_type === 'INVOICE' && (
+                            <div className="preview-meta-bold">DUE: {new Date(selectedInv.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase()}</div>
+                          )}
                         </div>
                         <div className="preview-header-right">
                           <div className="preview-biz-name" role="heading" aria-level={3}>{business.name}</div>
@@ -381,6 +586,7 @@ export default function BusinessDetailPage() {
                         <div className="preview-section-title">BILL TO</div>
                         <div className="preview-customer">{selectedInv.customer_name}</div>
                         {selectedInv.customer_phone && <div className="preview-meta-bold">{selectedInv.customer_phone}</div>}
+                        {selectedInv.customer_email && <div className="preview-meta-bold">{selectedInv.customer_email}</div>}
                       </div>
 
                       {selectedInv.description && (
@@ -407,8 +613,8 @@ export default function BusinessDetailPage() {
                               <tr key={idx}>
                                 <td>{item.item_name}</td>
                                 <td className="text-center">{item.quantity}</td>
-                                <td className="text-center">RM {item.price.toFixed(2)}</td>
-                                <td className="text-right">RM {item.total.toFixed(2)}</td>
+                                <td className="text-center">{formatRM(item.price)}</td>
+                                <td className="text-right">{formatRM(item.total)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -418,15 +624,15 @@ export default function BusinessDetailPage() {
                       <div className="preview-summary">
                         <div className="preview-summary-line">
                           <span>Sub Total</span>
-                          <span style={{ color: '#0f172a' }}>RM {selectedInv.subtotal.toFixed(2)}</span>
+                          <span style={{ color: '#0f172a' }}>{formatRM(selectedInv.subtotal)}</span>
                         </div>
                         <div className="preview-summary-line">
                           <span>Discount</span>
-                          <span style={{ color: '#0f172a' }}>RM {selectedInv.discount.toFixed(2)}</span>
+                          <span style={{ color: '#0f172a' }}>{formatRM(selectedInv.discount)}</span>
                         </div>
                         <div className="preview-total-row">
                           <span>TOTAL</span>
-                          <span>RM {selectedInv.total.toFixed(2)}</span>
+                          <span>{formatRM(selectedInv.total)}</span>
                         </div>
                       </div>
                     </div>
@@ -448,6 +654,14 @@ export default function BusinessDetailPage() {
               </footer>
             </div>
           </div>
+        )}
+
+        {paymentFor && (
+          <MarkPaidModal
+            invoice={paymentFor}
+            onClose={() => setPaymentFor(null)}
+            onUpdated={handlePaymentUpdated}
+          />
         )}
 
         {showDeleteBusinessModal && (
@@ -483,7 +697,7 @@ export default function BusinessDetailPage() {
               <div className="signout-modal-body" id="delete-business-desc">
                 <p>
                   Are you sure you want to delete <strong>{business.name}</strong>? Existing invoices stay intact,
-                  but this business will be removed from your dashboard.
+                  but this business and its saved customers will be removed from your dashboard.
                 </p>
               </div>
 

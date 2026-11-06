@@ -44,8 +44,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from /login and /signup
-  if ((pathname === "/login" || pathname === "/signup") && user) {
+  // /reset-password needs the recovery session created by /auth/callback
+  if (pathname.startsWith("/reset-password") && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/forgot-password";
+    return NextResponse.redirect(url);
+  }
+
+  // Redirect authenticated users away from /login, /signup and /forgot-password
+  if (
+    (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") &&
+    user
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

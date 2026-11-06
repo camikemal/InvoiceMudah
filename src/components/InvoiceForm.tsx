@@ -1,22 +1,36 @@
 'use client';
 
 /**
- * InvoiceForm Component — Phase 2
+ * InvoiceForm Component
  * ─────────────────────────────────────────────────────────────
  * Features:
  *  • Document type picker: INVOICE / RECEIPT / QUOTATION
  *  • Running number input (user sets current → next = current+1)
- *  • Invoice number format: INV_{BIZNAME}_{N}
- *  • Download PDF = auto-save (one action)
- *  • After download+save: shows "Back to Business →" button
+ *  • Invoice number format: "TYPE N - BIZNAME"
+ *  • Saved-customer autocomplete, optional "save as customer"
+ *  • Due date for invoices (defaults from business settings)
+ *  • Atomic save via the save_invoice RPC
  */
 
 import { useState, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import ItemList from '@/components/ItemList';
+import CustomerAutocomplete from '@/components/CustomerAutocomplete';
 import { generatePDF } from '@/lib/generatePDF';
-import type { Business, Invoice, InvoiceItem, UserSettings } from '@/types/invoice';
-import { emptyItem, formatInvoiceNumber, type DocumentType } from '@/types/invoice';
+import { fetchNextRunningNumber, friendlyDbError, saveInvoice } from '@/lib/invoices';
+import { firstError, invoiceSchema } from '@/lib/validation';
+import type { Business, Customer, Invoice, InvoiceItem, UserSettings } from '@/types/invoice';
+import {
+  BUSINESS_TYPE_DEFAULTS,
+  addDaysISO,
+  defaultStatusFor,
+  emptyItem,
+  formatInvoiceNumber,
+  formatRM,
+  parseRunningNumber,
+  todayISO,
+  type DocumentType,
+} from '@/types/invoice';
 
 const DOC_TYPES: DocumentType[] = ['INVOICE', 'RECEIPT', 'QUOTATION'];
 
@@ -24,7 +38,7 @@ interface InvoiceFormProps {
   business: Business;
   userId: string;
   userSettings: UserSettings;
-  /** Existing invoice data for editing */
+  /** Existing invoice data for editing, or prefill data (no id) when converting */
   initialData?: Invoice;
   /** 'new' (default) or 'edit' */
   mode?: 'new' | 'edit';
@@ -47,10 +61,17 @@ export default function InvoiceForm({
   onDone,
 }: InvoiceFormProps) {
   const supabase = createClient();
-  const today = initialData?.invoice_date || new Date().toISOString().split('T')[0];
+  const typeDefaults = BUSINESS_TYPE_DEFAULTS[business.business_type ?? 'HOMESTAY'];
 
-  // ── Document type ─────────────────────────────────────────────
+  // ── Document type & date ──────────────────────────────────────
   const [docType, setDocType] = useState<DocumentType>(initialData?.document_type || 'INVOICE');
+  const [invoiceDate, setInvoiceDate] = useState(
+    mode === 'edit' && initialData?.invoice_date ? initialData.invoice_date : todayISO(),
+  );
+  const dueDays = business.default_due_days ?? 0;
+  const [dueDate, setDueDate] = useState<string>(
+    initialData?.due_date ?? (dueDays > 0 ? addDaysISO(invoiceDate, dueDays) : ''),
+  );
 
   // ── Running number ────────────────────────────────────────────
   // currentNumber = the LAST used number (from user_settings)
@@ -58,15 +79,8 @@ export default function InvoiceForm({
   // If editing, we use the number from initialData but stripped of the prefix
   const getInitialNumber = () => {
     if (mode === 'edit' && initialData) {
-      const numStr = initialData.invoice_number;
-      // Try new format: "TYPE N - BIZ"
-      const matchNew = numStr.match(/^(?:INVOICE|RECEIPT|QUOTATION)\s+(\d+)\s+-/i);
-      if (matchNew) return parseInt(matchNew[1]) - 1;
-      
-      // Try old format: "PREFIX_BIZ_N"
-      const parts = numStr.split('_');
-      const lastPart = parseInt(parts[parts.length - 1]);
-      if (!isNaN(lastPart)) return lastPart - 1;
+      const n = parseRunningNumber(initialData.invoice_number);
+      if (n !== null) return n - 1;
     }
     return userSettings.last_invoice_number;
   };
@@ -76,13 +90,17 @@ export default function InvoiceForm({
   const invoiceNumber = formatInvoiceNumber(docType, business.name, nextNumber);
 
   // ── Customer details ──────────────────────────────────────────
+  const [customerId,    setCustomerId]    = useState<string | null>(initialData?.customer_id ?? null);
   const [customerName,  setCustomerName]  = useState(initialData?.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(initialData?.customer_phone || '');
   const [customerEmail, setCustomerEmail] = useState(initialData?.customer_email || '');
-  const [description,   setDescription]  = useState(initialData?.description || 'Check in  :\nCheck out :');
+  const [saveCustomer,  setSaveCustomer]  = useState(false);
+  const [description,   setDescription]  = useState(
+    initialData?.description ?? business.default_description ?? typeDefaults.description,
+  );
 
   // ── Line items ────────────────────────────────────────────────
-  const [items, setItems] = useState<InvoiceItem[]>(initialData?.items || [emptyItem()]);
+  const [items, setItems] = useState<InvoiceItem[]>(initialData?.items?.length ? initialData.items : [emptyItem()]);
 
   // ── Discount ──────────────────────────────────────────────────
   const [discount, setDiscount] = useState(initialData?.discount || 0);
@@ -111,7 +129,7 @@ export default function InvoiceForm({
           if (i !== idx) return item;
           const updated = { ...item, [field]: value };
           if (field === 'quantity' || field === 'price') {
-            updated.total = Number(updated.quantity) * Number(updated.price);
+            updated.total = Math.round(Number(updated.quantity) * Number(updated.price) * 100) / 100;
           }
           return updated;
         })
@@ -120,119 +138,98 @@ export default function InvoiceForm({
     []
   );
 
+  const handleSelectCustomer = (c: Customer) => {
+    setCustomerId(c.id);
+    setCustomerName(c.name);
+    setCustomerPhone(c.phone ?? '');
+    setCustomerEmail(c.email ?? '');
+    setSaveCustomer(false);
+  };
+
+  const handleDocTypeChange = (t: DocumentType) => {
+    setDocType(t);
+    if (t !== 'INVOICE') setDueDate('');
+    else if (!dueDate && dueDays > 0) setDueDate(addDaysISO(invoiceDate, dueDays));
+  };
+
   // ── Build invoice object ──────────────────────────────────────
-  const buildInvoice = (): Invoice => ({
-    user_id:       userId,
-    business_id:   business.id,
-    invoice_number: invoiceNumber,
-    invoice_date:  today,
-    document_type: docType,
-    customer_name: customerName,
-    customer_phone: customerPhone,
-    customer_email: customerEmail.trim() || null,
-    description,
-    items,
-    subtotal,
-    discount,
-    total: finalTotal,
-  });
+  const buildInvoice = (): Invoice => {
+    const status =
+      mode === 'edit' && initialData?.status && initialData.document_type === docType
+        ? initialData.status
+        : defaultStatusFor(docType);
+    return {
+      id:             mode === 'edit' ? initialData?.id : undefined,
+      user_id:        userId,
+      business_id:    business.id,
+      invoice_number: invoiceNumber,
+      invoice_date:   invoiceDate,
+      document_type:  docType,
+      customer_id:    customerId,
+      customer_name:  customerName.trim(),
+      customer_phone: customerPhone.trim(),
+      customer_email: customerEmail.trim() || null,
+      description,
+      items,
+      subtotal,
+      discount,
+      total: finalTotal,
+      status,
+      due_date:          docType === 'INVOICE' && dueDate ? dueDate : null,
+      paid_at:           mode === 'edit' ? initialData?.paid_at ?? null : null,
+      amount_paid:       mode === 'edit' ? initialData?.amount_paid ?? 0 : 0,
+      source_invoice_id: initialData?.source_invoice_id ?? null,
+    };
+  };
 
   // ── Save to Supabase ──────────────────────────────────────────
   const handleSave = async () => {
-    if (!customerName.trim()) {
-      setError('Please enter a customer name.');
+    const invoice = buildInvoice();
+    const validationError = firstError(invoiceSchema, invoice);
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setError('');
-
-    const invoice = buildInvoice();
     setSaving(true);
+
     try {
-      if (mode === 'edit' && initialData?.id) {
-        // UPDATE existing invoice
-        const { error: invErr } = await supabase
-          .from('invoices')
-          .update({
-            invoice_number: invoice.invoice_number,
-            customer_name:  invoice.customer_name,
-            customer_email: invoice.customer_email,
-            customer_phone: invoice.customer_phone,
-            description:    invoice.description,
-            discount:       invoice.discount,
-            subtotal:       invoice.subtotal,
-            total:          invoice.total,
-            invoice_date:   invoice.invoice_date,
-            document_type:  invoice.document_type,
-          })
-          .eq('id', initialData.id);
-
-        if (invErr) throw invErr;
-
-        // Sync line items: simplest is delete + insert
-        await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', initialData.id);
-
-        const itemRows = invoice.items.map((item, idx) => ({
-          invoice_id: initialData.id,
-          item_name:  item.item_name,
-          quantity:   item.quantity,
-          price:      item.price,
-          total:      item.total,
-          sort_order: idx,
-        }));
-        const { error: itemsErr } = await supabase
-          .from('invoice_items')
-          .insert(itemRows);
-        if (itemsErr) throw itemsErr;
-
-      } else {
-        // INSERT new invoice
-        const { data: inv, error: invErr } = await supabase
-          .from('invoices')
+      if (saveCustomer && !customerId && business.id) {
+        const { data: cust, error: custErr } = await supabase
+          .from('customers')
           .insert({
-            user_id:        userId,
-            business_id:    invoice.business_id,
-            invoice_number: invoice.invoice_number,
-            customer_email: invoice.customer_email,
-            customer_name:  invoice.customer_name,
-            customer_phone: invoice.customer_phone,
-            description:    invoice.description,
-            discount:       invoice.discount,
-            subtotal:       invoice.subtotal,
-            total:          invoice.total,
-            invoice_date:   invoice.invoice_date,
-            document_type:  invoice.document_type,
+            user_id:     userId,
+            business_id: business.id,
+            name:        invoice.customer_name,
+            phone:       invoice.customer_phone || null,
+            email:       invoice.customer_email || null,
           })
-          .select()
+          .select('id')
           .single();
+        if (custErr) throw custErr;
+        invoice.customer_id = cust.id;
+        setCustomerId(cust.id);
+      }
 
-        if (invErr) throw invErr;
+      await saveInvoice(supabase, invoice, mode === 'new' ? nextNumber : null);
 
-        // Insert line items
-        const itemRows = invoice.items.map((item, idx) => ({
-          invoice_id: inv.id,
-          item_name:  item.item_name,
-          quantity:   item.quantity,
-          price:      item.price,
-          total:      item.total,
-          sort_order: idx,
-        }));
-        const { error: itemsErr } = await supabase
-          .from('invoice_items')
-          .insert(itemRows);
-        if (itemsErr) throw itemsErr;
-
-        // Update user running number (only for NEW invoices)
+      // Issuing a receipt for an invoice settles that invoice
+      if (mode === 'new' && docType === 'RECEIPT' && invoice.source_invoice_id) {
         await supabase
-          .from('user_settings')
-          .upsert({ user_id: userId, last_invoice_number: nextNumber }, { onConflict: 'user_id' });
+          .from('invoices')
+          .update({ status: 'PAID', amount_paid: invoice.total, paid_at: invoice.invoice_date })
+          .eq('id', invoice.source_invoice_id)
+          .eq('document_type', 'INVOICE');
       }
 
       setSaved(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Save failed. Check console.');
+      const code = (err as { code?: string })?.code;
+      if (code === '23505' && mode === 'new') {
+        const next = await fetchNextRunningNumber(supabase);
+        if (next !== null && next - 1 > currentNumber) setCurrentNumber(next - 1);
+      }
+      setError(friendlyDbError(err));
     } finally {
       setSaving(false);
     }
@@ -240,16 +237,16 @@ export default function InvoiceForm({
 
   // ── Download PDF Only ─────────────────────────────────────────
   const handleDownload = () => {
-    const invoice = buildInvoice();
-    generatePDF(invoice, business);
+    generatePDF(buildInvoice(), business);
   };
 
   // ── Post-save state ───────────────────────────────────────────
   if (saved) {
+    const label = docType.charAt(0) + docType.slice(1).toLowerCase();
     return (
       <div className="invoice-saved-screen">
         <div className="invoice-saved-icon">✓</div>
-        <h2>Invoice Downloaded &amp; {mode === 'edit' ? 'Updated' : 'Saved'}</h2>
+        <h2>{label} {mode === 'edit' ? 'Updated' : 'Saved'}</h2>
         <p className="invoice-saved-num">{invoiceNumber}</p>
         <p className="invoice-saved-sub">
           The record is {mode === 'edit' ? 'updated' : 'saved'} to your account. You can download the PDF anytime.
@@ -280,14 +277,14 @@ export default function InvoiceForm({
                 key={t}
                 type="button"
                 className={`doc-type-btn${docType === t ? ' doc-type-btn--active' : ''}`}
-                onClick={() => setDocType(t)}
+                onClick={() => handleDocTypeChange(t)}
               >
                 {t}
               </button>
             ))}
           </div>
           <div className="inv-header-meta">INV NO: {invoiceNumber}</div>
-          <div className="inv-header-meta">DATE: {formatDisplayDate(today)}</div>
+          <div className="inv-header-meta">DATE: {formatDisplayDate(invoiceDate)}</div>
         </div>
         <div className="inv-header-right">
           <div className="inv-biz-name">{business.name}</div>
@@ -295,6 +292,12 @@ export default function InvoiceForm({
           <div className="inv-biz-meta">{business.phone}</div>
         </div>
       </div>
+
+      {initialData?.source_invoice_id && mode === 'new' && (
+        <p className="form-info">
+          Converting from <strong>{initialData.invoice_number}</strong>. Review the details, then save.
+        </p>
+      )}
 
       {/* ── Running number ───────────────────────────────────── */}
       <div className="inv-section">
@@ -311,10 +314,37 @@ export default function InvoiceForm({
               className="running-input"
               value={currentNumber === 0 ? '' : currentNumber}
               placeholder="0"
-              onChange={e => setCurrentNumber(parseInt(e.target.value) || 0)}
+              onChange={e => setCurrentNumber(Math.max(0, parseInt(e.target.value) || 0))}
             />
             <span className="running-preview">→ {invoiceNumber}</span>
           </div>
+        </div>
+      </div>
+
+      {/* ── Dates ────────────────────────────────────────────── */}
+      <div className="inv-section">
+        <div className="inv-row-2">
+          <div className="form-field">
+            <label htmlFor="inv-date">{docType === 'QUOTATION' ? 'Quotation Date' : 'Date'}</label>
+            <input
+              id="inv-date"
+              type="date"
+              value={invoiceDate}
+              onChange={e => setInvoiceDate(e.target.value || todayISO())}
+            />
+          </div>
+          {docType === 'INVOICE' && (
+            <div className="form-field">
+              <label htmlFor="inv-due-date">Due Date (Optional)</label>
+              <input
+                id="inv-due-date"
+                type="date"
+                min={invoiceDate}
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -324,16 +354,28 @@ export default function InvoiceForm({
         <div className="inv-row-2">
           <div className="form-field-stack">
             <div className="form-field">
-              <label>Customer Name *</label>
-              <input
-                id="inv-customer-name"
-                placeholder="e.g. Akmal Hakim"
-                value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
-              />
+              <label htmlFor="inv-customer-name">Customer Name *</label>
+              {business.id ? (
+                <CustomerAutocomplete
+                  businessId={business.id}
+                  value={customerName}
+                  selectedId={customerId}
+                  onChangeName={name => {
+                    setCustomerName(name);
+                    setCustomerId(null);
+                  }}
+                  onSelect={handleSelectCustomer}
+                />
+              ) : (
+                <input
+                  id="inv-customer-name"
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                />
+              )}
             </div>
             <div className="form-field">
-              <label>Customer Email (Optional)</label>
+              <label htmlFor="inv-customer-email">Customer Email (Optional)</label>
               <input
                 id="inv-customer-email"
                 type="email"
@@ -343,14 +385,26 @@ export default function InvoiceForm({
               />
             </div>
           </div>
-          <div className="form-field">
-            <label>Customer Phone</label>
-            <input
-              id="inv-customer-phone"
-              placeholder="e.g. 018-765 4321"
-              value={customerPhone}
-              onChange={e => setCustomerPhone(e.target.value)}
-            />
+          <div className="form-field-stack">
+            <div className="form-field">
+              <label htmlFor="inv-customer-phone">Customer Phone</label>
+              <input
+                id="inv-customer-phone"
+                placeholder="e.g. 018-765 4321"
+                value={customerPhone}
+                onChange={e => setCustomerPhone(e.target.value)}
+              />
+            </div>
+            {!customerId && customerName.trim() && (
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={saveCustomer}
+                  onChange={e => setSaveCustomer(e.target.checked)}
+                />
+                Save to customer list
+              </label>
+            )}
           </div>
         </div>
       </div>
@@ -362,7 +416,7 @@ export default function InvoiceForm({
           id="inv-description"
           className="mono-textarea"
           rows={3}
-          placeholder={`Check in  : 23 March 2026\nCheck out : 24 March 2026`}
+          placeholder={typeDefaults.description || 'Notes shown on the document'}
           value={description}
           onChange={e => setDescription(e.target.value)}
         />
@@ -373,6 +427,7 @@ export default function InvoiceForm({
         <div className="item-list-shell">
           <ItemList
             items={items}
+            itemPlaceholder={typeDefaults.itemPlaceholder}
             onAdd={handleAddItem}
             onRemove={handleRemoveItem}
             onChange={handleItemChange}
@@ -384,7 +439,7 @@ export default function InvoiceForm({
       <div className="inv-summary">
         <div className="inv-summary-line">
           <span>Sub Total</span>
-          <span>RM {subtotal.toFixed(2)}</span>
+          <span>{formatRM(subtotal)}</span>
         </div>
         <div className="inv-summary-line">
           <span>Discount</span>
@@ -392,21 +447,22 @@ export default function InvoiceForm({
             id="inv-discount"
             type="number"
             min={0}
+            max={subtotal}
             step={0.01}
             className="discount-input"
             value={discount === 0 ? '' : discount}
             placeholder="0"
-            onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
+            onChange={e => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
           />
         </div>
         <div className="inv-total-row">
           <span>TOTAL</span>
-          <span>RM {finalTotal.toFixed(2)}</span>
+          <span>{formatRM(finalTotal)}</span>
         </div>
       </div>
 
       {/* ── Action ───────────────────────────────────────────── */}
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
 
       <div className="inv-action inv-action--split">
         <button

@@ -16,12 +16,13 @@ import type { InvoiceItem } from '@/types/invoice';
 
 interface ItemListProps {
   items: InvoiceItem[];
+  itemPlaceholder?: string;
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChange: (index: number, field: keyof InvoiceItem, value: string | number) => void;
 }
 
-export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListProps) {
+export default function ItemList({ items, itemPlaceholder = 'e.g. Deluxe Room', onAdd, onRemove, onChange }: ItemListProps) {
   return (
     <div className="item-list">
       {/* ── Table header ──────────────────────────────────── */}
@@ -45,7 +46,7 @@ export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListP
             <input
               id={`item-name-${idx}`}
               className="item-input"
-              placeholder="e.g. Deluxe Room"
+              placeholder={itemPlaceholder}
               value={item.item_name}
               onChange={e => onChange(idx, 'item_name', e.target.value)}
             />
@@ -61,7 +62,7 @@ export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListP
               step={1}
               value={item.quantity === 0 ? '' : item.quantity}
               placeholder="0"
-              onChange={e => onChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
+              onChange={e => onChange(idx, 'quantity', Math.max(0, parseFloat(e.target.value) || 0))}
             />
           </div>
 
@@ -75,7 +76,7 @@ export default function ItemList({ items, onAdd, onRemove, onChange }: ItemListP
               step={0.01}
               value={item.price === 0 ? '' : item.price}
               placeholder="0"
-              onChange={e => onChange(idx, 'price', parseFloat(e.target.value) || 0)}
+              onChange={e => onChange(idx, 'price', Math.max(0, parseFloat(e.target.value) || 0))}
             />
           </div>
 

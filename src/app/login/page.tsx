@@ -1,20 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(searchParams.get("error") ?? "");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,9 +92,14 @@ export default function LoginPage() {
             </div>
 
             <div className="auth-field">
-              <label className="auth-label" htmlFor="password">
-                Password
-              </label>
+              <div className="auth-label-row">
+                <label className="auth-label" htmlFor="password">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="auth-switch-link auth-forgot-link">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="auth-input-wrapper">
                 <input
                   id="password"

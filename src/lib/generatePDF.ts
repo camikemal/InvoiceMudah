@@ -6,6 +6,7 @@ const WHITE     = [255, 255, 255] as const;
 const LIGHT_GREY= [245, 245, 245] as const;
 const TEXT_DARK = [30,  30,  30]  as const;
 const TEXT_MED  = [80,  80,  80]  as const;
+const PAID_GREEN= [22,  163, 74]  as const;
 
 function wrapText(doc: jsPDF, text: string, maxWidth: number): string[] {
   if (!text) return [];
@@ -51,6 +52,25 @@ function drawLabelValue(doc: jsPDF, label: string, value: string, x: number, y: 
   doc.text(value, x + labelW + 1.5, y);
 }
 
+/** Rotated "PAID" rubber-stamp style mark */
+function drawPaidStamp(doc: jsPDF, cx: number, cy: number, paidAt?: string | null): void {
+  const w = 46, h = paidAt ? 20 : 15;
+  const x = cx - w / 2, y = cy - 2;
+  doc.setDrawColor(...PAID_GREEN);
+  doc.setLineWidth(1);
+  doc.roundedRect(x, y, w, h, 2, 2, 'S');
+  doc.setTextColor(...PAID_GREEN);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('PAID', cx, y + 10.5, { align: 'center' });
+  if (paidAt) {
+    doc.setFontSize(7.5);
+    doc.text(formatDate(paidAt), cx, y + 16.5, { align: 'center' });
+  }
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(220, 220, 220);
+}
+
 export function generatePDF(invoice: Invoice, business: Business): void {
   const doc   = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -81,6 +101,12 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.text(`INV NO: ${invoice.invoice_number}`, mL, y);
   y += 5;
   doc.text(`DATE: ${formatDate(invoice.invoice_date)}`, mL, y);
+  if (invoice.document_type === 'INVOICE' && invoice.due_date) {
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`DUE: ${formatDate(invoice.due_date)}`, mL, y);
+    doc.setFont('helvetica', 'normal');
+  }
 
   doc.setFontSize(9);
   doc.setTextColor(...TEXT_MED);
@@ -157,6 +183,22 @@ export function generatePDF(invoice: Invoice, business: Business): void {
   doc.text('TOTAL', tbX + 6, y + 9);
   doc.setFontSize(14);
   doc.text(rm(invoice.total), mR - 6, y + 9.5, { align: 'right' });
+
+  const isPaid = invoice.status === 'PAID' && invoice.document_type !== 'QUOTATION';
+  const amountPaid = Number(invoice.amount_paid ?? 0);
+  if (isPaid) {
+    drawPaidStamp(doc, mL + 40, y + 4, invoice.paid_at);
+  } else if (invoice.document_type === 'INVOICE' && invoice.status === 'PARTIAL' && amountPaid > 0) {
+    y += tbH + 6;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...TEXT_MED);
+    doc.text('Paid', sumLX, y, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(rm(amountPaid), sumVX, y, { align: 'right' }); y += 6;
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(...TEXT_DARK);
+    doc.text('Balance Due', sumLX, y, { align: 'right' });
+    doc.text(rm(Math.max(0, invoice.total - amountPaid)), sumVX, y, { align: 'right' });
+    y -= tbH;
+  }
   y += tbH + 16;
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXT_DARK);
