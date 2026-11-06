@@ -36,7 +36,8 @@ export async function proxy(request: NextRequest) {
   if (
     (pathname.startsWith('/dashboard') ||
       pathname.startsWith('/invoice') ||
-      pathname.startsWith('/business')) &&
+      pathname.startsWith('/business') ||
+      pathname.startsWith('/profile')) &&
     !user
   ) {
     const url = request.nextUrl.clone();

@@ -1527,3 +1527,32 @@ html, body {
 .tooltip--below { transform: translate(-50%, 0); }
 .tooltip--below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: #0f172a; }
 @keyframes tooltip-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Profile page ────────────────────────────── */
+.profile-menu-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 34px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: #fff; color: var(--text);
+  font-size: 12px; font-weight: 700; text-decoration: none;
+  transition: all 0.15s;
+}
+.profile-menu-link:hover { background: #eef2ff; border-color: #c7d2fe; color: var(--accent); }
+
+.profile-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.profile-avatar {
+  width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #3b2de0 0%, #7c5af3 60%, #b8aaff 100%);
+  color: #fff; font-size: 22px; font-weight: 700;
+}
+.profile-card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+}
+.profile-card-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.form-field input:disabled { background: var(--bg); color: var(--text-2); cursor: not-allowed; }
+
+@media (max-width: 640px) {
+  .profile-card .biz-form-grid { grid-template-columns: 1fr; }
+}

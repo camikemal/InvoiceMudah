@@ -2,21 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 
 interface SignOutButtonProps {
   email?: string | null;
+  name?: string | null;
 }
 
-export default function SignOutButton({ email }: SignOutButtonProps) {
+export default function SignOutButton({ email, name }: SignOutButtonProps) {
   const router = useRouter();
   const supabase = createClient();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const accountName = email?.split("@")[0] ?? "Account";
-  const avatarText = (accountName[0] ?? "A").toUpperCase();
+  const accountName = name?.trim() || email?.split("@")[0] || "Account";
+  const avatarText = accountName
+    .split(/\s+/)
+    .map(word => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "A";
 
   useEffect(() => {
     if (!showConfirm && !showMenu) return;
@@ -82,6 +89,14 @@ export default function SignOutButton({ email }: SignOutButtonProps) {
               <div className="profile-menu-name">{accountName}</div>
               <div className="profile-menu-email">{email || "No email"}</div>
             </div>
+            <Link
+              href="/profile"
+              className="profile-menu-link"
+              role="menuitem"
+              onClick={() => setShowMenu(false)}
+            >
+              Profile &amp; Password
+            </Link>
             <button
               type="button"
               className="profile-menu-signout"

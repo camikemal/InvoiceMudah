@@ -54,7 +54,7 @@ export default async function DashboardPage() {
         </div>
         <div className="app-header-actions app-header-right">
           <span className="app-header-title">Dashboard</span>
-          <SignOutButton email={user.email} />
+          <SignOutButton email={user.email} name={user.user_metadata?.full_name} />
         </div>
       </header>
 

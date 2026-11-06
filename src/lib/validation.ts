@@ -54,6 +54,24 @@ export const customerSchema = z.object({
   phone: z.string().trim().max(40, 'Phone number is too long.').nullish(),
 });
 
+export const profileSchema = z.object({
+  full_name: z.string().trim().min(1, 'Please enter your name.').max(100, 'Name is too long.'),
+  phone: z
+    .string()
+    .trim()
+    .max(20, 'Phone number is too long.')
+    .regex(/^[0-9+\s()-]*$/, 'Phone number can only contain digits, spaces, +, - and brackets.'),
+});
+
+export const passwordChangeSchema = z
+  .object({
+    current: z.string().min(1, 'Please enter your current password.'),
+    next: z.string().min(8, 'New password must be at least 8 characters.'),
+    confirm: z.string(),
+  })
+  .refine(v => v.next === v.confirm, { message: 'New passwords do not match.', path: ['confirm'] })
+  .refine(v => v.next !== v.current, { message: 'New password must be different from the current one.', path: ['next'] });
+
 export const paymentSchema = z.object({
   amount: z.number().finite('Amount must be a number.').positive('Amount must be more than 0.'),
   paid_at: isoDate,
