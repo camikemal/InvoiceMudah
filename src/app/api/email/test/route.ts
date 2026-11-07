@@ -4,9 +4,14 @@ import { sendEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_RECIPIENT = 'trucode.company@gmail.com';
+/** Test sends only go to the sender's own inbox so a leaked secret can't be used to spam others. */
+const TEST_RECIPIENT = process.env.SMTP_USER || 'trucode.company@gmail.com';
 
 export async function GET(request: Request) {
+  if (process.env.VERCEL_ENV === 'production') {
+    return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
+  }
+
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json(
@@ -18,13 +23,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const to = new URL(request.url).searchParams.get('to') || DEFAULT_RECIPIENT;
-
   const result = await sendEmail({
-    to,
+    to: TEST_RECIPIENT,
     subject: 'InvoiceMudah test email',
     text: 'Congrats! InvoiceMudah can now send email from your Gmail account.',
   });
 
-  return NextResponse.json({ ...result, to }, { status: result.ok ? 200 : 502 });
+  return NextResponse.json({ ...result, to: TEST_RECIPIENT }, { status: result.ok ? 200 : 502 });
 }
