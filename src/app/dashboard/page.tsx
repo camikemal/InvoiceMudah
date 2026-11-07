@@ -92,7 +92,7 @@ export default async function DashboardPage() {
             <section className="chart-card">
               <div className="section-heading">
                 <h2>Monthly billed</h2>
-                <span className="section-count">Last 12 months</span>
+                <span className="section-count">Last 12 months · RM</span>
               </div>
               <MonthlyChart data={chart} />
             </section>
