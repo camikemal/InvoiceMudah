@@ -1,17 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { isAuthorized } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
 function unauthorized() {
   return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-}
-
-/** Accepts `Authorization: Bearer <secret>` (Vercel Cron) or `?secret=<secret>` */
-function isAuthorized(request: Request, cronSecret: string): boolean {
-  const header = request.headers.get('authorization');
-  if (header === `Bearer ${cronSecret}`) return true;
-  return new URL(request.url).searchParams.get('secret') === cronSecret;
 }
 
 export async function GET(request: Request) {
