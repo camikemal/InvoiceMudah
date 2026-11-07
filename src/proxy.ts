@@ -52,11 +52,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from /login, /signup and /forgot-password
-  if (
-    (pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password") &&
-    user
-  ) {
+  // /forgot-password stays reachable when signed in (linked from /profile)
+  if ((pathname === "/login" || pathname === "/signup") && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

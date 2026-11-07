@@ -230,8 +230,7 @@ export default function ProfilePage() {
               </div>
             </div>
             <p className="running-hint">At least 8 characters.</p>
-            {/* TODO: re-enable once password reset emails work
-            <p className="running-hint">Forgot your current password? <Link href="/forgot-password" className="auth-switch-link">Reset it by email</Link>.</p> */}
+            <p className="running-hint">Forgot your current password? <Link href="/forgot-password" className="auth-switch-link">Reset it with an email code</Link>.</p>
             {passwordError && <p className="form-error" role="alert">{passwordError}</p>}
             <div className="form-actions">
               <button type="submit" className="btn btn--primary" disabled={savingPassword}>

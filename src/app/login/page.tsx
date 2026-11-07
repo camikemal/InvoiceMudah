@@ -96,10 +96,9 @@ function LoginContent() {
                 <label className="auth-label" htmlFor="password">
                   Password
                 </label>
-                {/* TODO: re-enable once password reset emails work
                 <Link href="/forgot-password" className="auth-switch-link auth-forgot-link">
                   Forgot password?
-                </Link> */}
+                </Link>
               </div>
               <div className="auth-input-wrapper">
                 <input
